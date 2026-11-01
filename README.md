@@ -49,3 +49,17 @@ Részfeladatok, heti visszatekintés és tartós fókusz
 - A Beállítások → XP és egyenleg nullázása megerősítést kér, az összesített XP-t, napi XP-haladást és elkölthető egyenleget nullázza, a szintet 1-re állítja. A feladatok, teljesítések, sorozatok, részfeladatok, jutalmak és előzmények megmaradnak. A korábbi XP-eseményeken opcionális `xpReset` jelölés szerepel, az egyenleg egy `xp-reset` ledger-bejegyzéssel áll nullára. A korábbi teljesítés visszavonása nem von le az új pontokból. A már átvett bónuszok nem válnak újra átvehetővé. A nullázás előtti események az előzményekben jelölést kapnak; a diagramok és XP-összesítések csak a nullázás utáni XP-t számolják.
 - Az emojiválasztó a feladat- és jutalomszerkesztőben is összecsukva indul. Az ikon megnyomására megjelenik a választható lista, választás után újra bezárul.
 - A `features.js` az `app.js` előtt töltődik be, és a PWA gyorsítótárának is része. Nincs új külső függőség vagy szolgáltatás. Szintaktikai ellenőrzéséhez: `node --check features.js`.
+
+Mobilon megnyitható tesztlinkek
+
+A GitHub Pages az éles alkalmazás mellett külön tesztkönyvtárat is kiszolgál: `preview/pr-<szám>/`. A tesztoldal létrehozásához nem kell másik tárhely vagy előfizetés. A kezdőképernyőn TESZTVERZIÓ jelzés látható, az éles alkalmazásra mutató hivatkozással.
+
+Következő fejlesztések előnézetének előkészítése egy, az aktuális `main` ágról nyitott külön ágon:
+
+```sh
+python3 scripts/prepare-preview.py --ref <ellenőrzött-fejlesztési-commit> --slug pr-<szám>
+```
+
+Csak a generált tesztkönyvtár és az esetleges tesztinfrastruktúra változásait kell feltölteni és beolvasztani; a fejlesztés gyökérkönyvtári alkalmazásfájljait nem. A GitHub Pages sikeres közzététele után a tesztlink: `https://reveszdominik.github.io/levelup/preview/pr-<szám>/`. Az új előnézetet mindig az adott PR aktuális, ellenőrzött commitjából kell újragenerálni; a forrás commitja a tesztkönyvtár `preview.json` fájljában található. A végleges élesítés továbbra is a fejlesztési PR külön beolvasztása.
+
+A tesztkönyvtár saját localStorage-kulcsot és fókuszzárolási nevet használ, ezért az éles alkalmazás adatai és XP-je nem változnak a teszteléstől. Nem regisztrál service workert, nem telepíthető PWA-ként, és a tesztből nem módosíthatók az éles értesítések. A tesztadatok ugyanabban a böngészőben később is megmaradnak; új PR új tesztadatokkal indul. Ezek statikus, nyilvános tesztoldalak: valódi személyes adatot ne töltsünk a repositoryba.
