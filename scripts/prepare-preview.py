@@ -25,7 +25,7 @@ def prepare(ref, slug, output):
     required = {'index.html', 'app.js', 'pastel.css', 'icon.svg'}
     if not required <= files:
         raise ValueError('The revision is missing required application assets.')
-    assets = {name: git('show', sha + ':' + name) for name in required | ({'features.js'} & files)}
+    assets = {name: git('show', sha + ':' + name) for name in required | ({'features.js', 'workflow.js'} & files)}
     app = replace_once(assets['app.js'], "const KEY='levelup-v1'", f"const KEY='levelup-preview-{slug}-v1'")
     # A Pages subpath shares its origin with production. Do not register a worker
     # that could delete production caches, or reuse production push subscriptions.
@@ -56,7 +56,7 @@ function testPush(){toast('Az értesítések a tesztverzióban ki vannak kapcsol
     for obsolete in ('sw.js', 'manifest.webmanifest'):
         (output / obsolete).unlink(missing_ok=True)
     for name, content in assets.items():
-        (output / name).write_text(content)
+        (output / name).write_text('\n'.join(line.rstrip() for line in content.splitlines())+'\n')
     (output / 'preview.json').write_text(json.dumps({'source_commit': sha, 'slug': slug, 'storage_key': f'levelup-preview-{slug}-v1'}, indent=2) + '\n')
     print(json.dumps({'source_commit': sha, 'directory': str(output), 'path': f'preview/{slug}/'}))
 
