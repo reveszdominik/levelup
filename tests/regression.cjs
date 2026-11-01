@@ -180,3 +180,104 @@ test('home preferences, reward shortcut and more menu preserve existing data', a
   assert.equal(await page.locator('[data-home-block]').first().getAttribute('data-home-block'), 'wish');
   assert.equal(await page.locator('[data-home-block=progress]').isVisible(), false);
 });
+
+test('quick entry creates one dated todo without awarding XP and supports later editing', async t => {
+  const page = await open(t);
+  const before = await page.evaluate(() => state.tasks.length);
+  await page.locator('#quickTaskName').fill('  Bevásárlás  ');
+  await page.locator('#quickTaskName').press('Enter');
+  assert.deepEqual(await page.evaluate(() => {
+    const task = state.tasks.at(-1);
+    return [state.tasks.length, task.name, task.kind, task.points, task.dueDate===day(), xp(), wallet()];
+  }), [before+1, 'Bevásárlás', 'todo', 10, true, 0, 0]);
+  const taskId = await page.evaluate(() => state.tasks.at(-1).id);
+  await page.locator(`[data-action=editTask][data-id="${taskId}"]`).click();
+  await page.locator('#taskForm [name=points]').fill('25');
+  await page.locator('#taskForm button[type=submit]').click();
+  await page.reload();
+  assert.deepEqual(await page.evaluate(id => {
+    const task = state.tasks.find(t=>t.id===id); return [task.name, task.points, task.kind];
+  }, taskId), ['Bevásárlás', 25, 'todo']);
+  await page.evaluate(() => { selectedDate=shift(day(),1);render(); });
+  await page.locator('#quickTaskName').fill('Holnapi teendő');
+  await page.locator('#quickTaskName').press('Enter');
+  const lastId = await page.evaluate(() => state.tasks.at(-1).id);
+  assert.equal(await page.locator(`[data-action=toggle][data-id="${lastId}"]`).isDisabled(), true);
+  assert.equal(await page.evaluate(() => state.tasks.at(-1).dueDate===shift(day(),1)), true);
+});
+
+test('daily highlight is date-specific, persistent, and gives no extra XP', async t => {
+  const page = await open(t);
+  const taskId = await page.evaluate(() => state.tasks[0].id);
+  await page.locator('[data-action=highlightModal]').click();
+  await page.locator(`[data-action=setHighlight][data-id="${taskId}"]`).click();
+  assert.equal(await page.locator('.daily-highlight-line').isVisible(), true);
+  assert.equal(await page.locator('.task-highlighted').count(), 1);
+  assert.deepEqual(await page.evaluate(() => [xp(), wallet()]), [0,0]);
+  await page.reload();
+  assert.equal(await page.locator('.task-highlighted').count(), 1);
+  await page.locator(`[data-action=toggle][data-id="${taskId}"]`).click();
+  assert.deepEqual(await page.evaluate(() => [xp(), wallet()]), [20,20]);
+  assert.match(await page.locator('.daily-highlight-line').innerText(), /Kész/);
+  await page.evaluate(() => { selectedDate=shift(day(),1);render(); });
+  assert.equal(await page.locator('.daily-highlight-line').count(), 0);
+  await page.locator('[data-action=dateToday]').click();
+  await page.locator('.daily-highlight-line').click();
+  await page.locator('[data-action=clearHighlight]').click();
+  await page.reload();
+  assert.equal(await page.locator('.task-highlighted').count(), 0);
+});
+
+test('archiving removes a habit from active views without losing history and restores it', async t => {
+  const page = await open(t);
+  const taskId = await page.evaluate(() => {
+    const task=state.tasks[0]; task.subtasks=['Első lépés'];
+    state.subtaskChecks[task.id+':'+day()]=[0]; toggle(task); return task.id;
+  });
+  const original = await page.evaluate(() => JSON.stringify({
+    history:state.history, ledger:state.ledger, checks:state.subtaskChecks, days:state.tasks[0].days,
+  }));
+  await page.locator(`[data-action=editTask][data-id="${taskId}"]`).click();
+  page.once('dialog', dialog=>dialog.dismiss());
+  await page.locator('[data-action=archiveTask]').click();
+  assert.equal(await page.evaluate(() => state.tasks[0].archived), false);
+  page.once('dialog', dialog=>dialog.accept());
+  await page.locator('[data-action=archiveTask]').click();
+  assert.equal(await page.locator(`[data-action=toggle][data-id="${taskId}"]`).count(), 0);
+  await page.reload();
+  assert.equal(await page.evaluate(() => state.tasks[0].archived), true);
+  assert.equal(await page.evaluate(() => JSON.stringify({
+    history:state.history, ledger:state.ledger, checks:state.subtaskChecks, days:state.tasks[0].days,
+  })), original);
+  await page.locator('[data-action=more]').click();
+  await page.locator('#modalRoot [data-tab=focus]').click();
+  assert.equal(await page.locator(`#focusTask option[value="${taskId}"]`).count(), 0);
+  await page.locator('#nav [data-tab=stats]').click();
+  assert.match(await page.locator('.habit-stats').first().innerText(), /Archivált/);
+  await page.locator('[data-action=more]').click();
+  await page.locator('#modalRoot [data-tab=tasks]').click();
+  await page.locator('.archived-habits summary').click();
+  await page.locator(`[data-action=restoreTask][data-id="${taskId}"]`).click();
+  await page.locator('#nav [data-tab=today]').click();
+  assert.equal(await page.locator(`[data-action=toggle][data-id="${taskId}"]`).isVisible(), true);
+  assert.deepEqual(await page.evaluate(() => [state.tasks[0].archived, xp(), wallet(), state.tasks[0].subtasks]), [false,20,20,['Első lépés']]);
+});
+
+test('XP goal shares momentum card and task groups stay compact across categories', async t => {
+  const page = await open(t);
+  assert.equal(await page.locator('.daily-progress').count(), 1);
+  assert.equal(await page.getByText('Napi XP-cél', {exact:true}).count(), 0);
+  assert.equal(await page.locator('.mission-group').count(), 2);
+  assert.equal(await page.locator('.category-group').count(), 0);
+  const taskId = await page.evaluate(() => state.tasks[0].id);
+  await page.locator(`[data-action=toggle][data-id="${taskId}"]`).click();
+  const bar=page.getByRole('progressbar', {name:'Napi XP-cél',exact:true});
+  assert.equal(await bar.getAttribute('aria-valuenow'), '20');
+  await page.locator(`[data-action=toggle][data-id="${taskId}"]`).click();
+  assert.equal(await bar.getAttribute('aria-valuenow'), '0');
+  await page.locator('[data-group="missions:habit"]').click();
+  assert.equal(await page.locator('[data-mission-kind=habit] .task-row').count(), 0);
+  assert.equal(await page.locator('[data-mission-kind=todo] .task-row').count(), 1);
+  await page.locator('[data-group="missions:habit"]').click();
+  assert.equal(await page.locator('[data-mission-kind=habit] .task-row').count(), 3);
+});
