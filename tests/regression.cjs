@@ -21,13 +21,13 @@ async function open(t, stored) {
   // Serve repository assets without a network service or external requests.
   await context.route('https://levelup.test/**', async route => {
     const name = new URL(route.request().url()).pathname.slice(1) || 'index.html';
-    if (!['index.html', 'app.js', 'manifest.webmanifest', 'icon.svg'].includes(name)) {
+    if (!['index.html', 'app.js', 'pastel.css', 'manifest.webmanifest', 'icon.svg'].includes(name)) {
       return route.abort();
     }
     await route.fulfill({
       body: await fs.readFile(path.join(__dirname, '..', name)),
       contentType: name.endsWith('.js') ? 'application/javascript' :
-        name.endsWith('.html') ? 'text/html' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/json',
+        name.endsWith('.css') ? 'text/css' : name.endsWith('.html') ? 'text/html' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/json',
     });
   });
   const page = await context.newPage();
@@ -97,7 +97,7 @@ test('failed replacement preserves recovery and original data; reset requires co
   await page.locator('[data-action=reset]').click();
   assert.equal(await page.evaluate(() => recoveryRequired), false);
   await page.reload();
-  assert.equal(await page.locator('#nav button').count(), 7);
+  assert.equal(await page.locator('#nav button').count(), 5);
 });
 
 test('past completion and undo use the selected date and original awarded XP', async t => {
@@ -151,8 +151,32 @@ test('chart labels align with dates; all seven mobile views load', async t => {
   const hu = { Mon: 'H', Tue: 'K', Wed: 'Sze', Thu: 'Cs', Fri: 'P', Sat: 'Szo', Sun: 'V' };
   assert.deepEqual(labels, expected.map(x => hu[x]));
   for (const tab of ['today', 'planner', 'tasks', 'rewards', 'stats', 'focus', 'settings']) {
+    if (['tasks', 'focus', 'settings'].includes(tab)) await page.locator('[data-action=more]').click();
     await page.locator(`[data-tab=${tab}]`).click();
     assert.ok((await page.locator('#view').innerText()).length > 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   }
+});
+
+test('home preferences, reward shortcut and more menu preserve existing data', async t => {
+  const page = await open(t);
+  await page.evaluate(() => {
+    state.wishId = state.rewards[0].id;
+    state.ui.blocks = ['wish', 'tasks', 'level', 'progress', 'quests'];
+    state.ui.hidden = ['progress'];
+    save(); render();
+  });
+  const saved = await page.evaluate(() => localStorage.getItem(KEY));
+  assert.equal(await page.locator('[data-home-block]').first().getAttribute('data-home-block'), 'wish');
+  assert.equal(await page.locator('[data-home-block=progress]').isVisible(), false);
+  await page.getByRole('button', { name: 'Jutalombolt megnyitása', exact: true }).click();
+  assert.equal(await page.locator('#pageTitle').innerText(), 'Jutalombolt');
+  await page.getByRole('button', { name: 'Továbbiak', exact: true }).click();
+  await page.locator('#modalRoot [data-tab=focus]').click();
+  assert.equal(await page.locator('#modalRoot').innerText(), '');
+  assert.equal(await page.locator('#pageTitle').innerText(), 'Fókusz');
+  assert.equal(await page.evaluate(() => localStorage.getItem(KEY)), saved);
+  await page.reload();
+  assert.equal(await page.locator('[data-home-block]').first().getAttribute('data-home-block'), 'wish');
+  assert.equal(await page.locator('[data-home-block=progress]').isVisible(), false);
 });
