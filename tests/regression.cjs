@@ -21,7 +21,7 @@ async function open(t, stored) {
   // Serve repository assets without a network service or external requests.
   await context.route('https://levelup.test/**', async route => {
     const name = new URL(route.request().url()).pathname.slice(1) || 'index.html';
-    if (!['index.html', 'app.js', 'features.js', 'pastel.css', 'manifest.webmanifest', 'icon.svg'].includes(name)) {
+    if (!['index.html', 'app.js', 'features.js', 'workflow.js', 'pastel.css', 'manifest.webmanifest', 'icon.svg'].includes(name)) {
       return route.abort();
     }
     await route.fulfill({
@@ -414,4 +414,122 @@ test('storage failures do not partially reset XP or award a focus block',async t
   assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions.length]),[20,20,0]);
   await page.evaluate(async()=>{Storage.prototype.setItem=window.realSetItem;await focusTick()});
   assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions.length]),[35,35,1]);
+});
+
+test('compact home has no greeting and search/status filters do not change daily totals',async t=>{
+ const page=await open(t);
+ assert.equal(await page.locator('.head').isVisible(),false);
+ assert.equal(await page.locator('.home-intro').count(),0);
+ assert.ok((await page.locator('.level-card').boundingBox()).height<=110);
+ const taskId=await page.evaluate(()=>state.tasks[0].id);
+ await page.locator(`[data-action=toggle][data-id="${taskId}"]`).click();
+ await page.locator('[data-workflow-action=filter][data-value=done]').click();
+ assert.equal(await page.locator('#missionResults .task-row').count(),1);
+ await page.locator('[data-workflow-action=filter][data-value=pending]').click();
+ assert.equal(await page.locator('#missionResults .task-row').count(),3);
+ assert.match(await page.locator('.momentum-tasks').innerText(),/1 \/ 4/);
+ await page.locator('[data-workflow-action=search]').click();
+ await page.locator('#missionSearch').fill('porszivozas');
+ assert.equal(await page.locator('#missionResults .task-row').count(),1);
+ assert.match(await page.locator('#missionResults').innerText(),/Porszívózás/);
+ await page.locator('#missionSearch').fill('nem létezik');
+ assert.equal(await page.locator('#missionResults .task-row').count(),0);
+ await page.locator('[data-workflow-action=clearFilters]').click();
+ assert.equal(await page.locator('#missionResults .task-row').count(),4);
+ await page.reload();
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.ui.missionFilter]),[20,20,'all']);
+});
+
+test('rescheduling keeps partial steps and completed todo dates cannot be rewritten',async t=>{
+ const page=await open(t);
+ const taskId=await page.evaluate(()=>{const t=state.tasks.find(t=>t.kind==='todo');t.subtasks=['Első lépés'];state.subtaskChecks[t.id+':'+day()]=[0];save();render();return t.id});
+ await page.locator(`[data-workflow-action=reschedule][data-id="${taskId}"]`).click();
+ const future=await page.evaluate(()=>shift(day(),10));
+ await page.locator('#moveDate').fill(future);await page.locator('#rescheduleForm button[type=submit]').click();
+ assert.equal(await page.locator(`[data-action=toggle][data-id="${taskId}"]`).count(),0);
+ assert.deepEqual(await page.evaluate(id=>[state.tasks.find(t=>t.id===id).dueDate,state.subtaskChecks[id+':'+shift(day(),10)],xp()],taskId),[future,[0],0]);
+ await page.evaluate(date=>{selectedDate=date;render()},future);
+ await page.locator(`[data-workflow-action=reschedule][data-id="${taskId}"]`).click();
+ const yesterday=await page.evaluate(()=>shift(day(),-1));
+ await page.locator('#moveDate').fill(yesterday);await page.locator('#rescheduleForm button[type=submit]').click();
+ await page.evaluate(date=>{selectedDate=date;render()},yesterday);
+ await page.locator(`[data-action=toggle][data-id="${taskId}"]`).click();
+ assert.equal(await page.locator(`[data-workflow-action=reschedule][data-id="${taskId}"]`).count(),0);
+ await page.locator(`[data-action=editTask][data-id="${taskId}"]`).click();
+ await page.locator('#taskForm [name=dueDate]').fill(future);await page.locator('#taskForm button[type=submit]').click();
+ assert.deepEqual(await page.evaluate(id=>[state.tasks.find(t=>t.id===id).dueDate,xp(),state.subtaskChecks[id+':'+shift(day(),-1)]],taskId),[yesterday,10,[0]]);
+});
+
+test('planned pause ranges can be added/removed and keep the streak across the break',async t=>{
+ const page=await open(t);await page.clock.install({time:new Date('2026-11-02T12:00:00+01:00')});
+ const taskId=await page.evaluate(()=>{state=migrate(seed());const t=state.tasks[0];t.created='2026-11-01';t.days=['2026-11-01'];selectedDate=day();save();tab='tasks';render();return t.id});
+ for(const mode of ['add','remove','add']){
+  await page.locator(`[data-workflow-action=pausePlan][data-id="${taskId}"]`).click();
+  await page.locator('#pauseFrom').fill('2026-11-02');await page.locator('#pauseTo').fill('2026-11-04');
+  await page.locator(`#pausePlanForm button[value=${mode}]`).click();
+  assert.equal(await page.evaluate(id=>state.tasks.find(t=>t.id===id).paused.length,taskId),mode==='remove'?0:3);
+ }
+ await page.clock.setSystemTime(new Date('2026-11-05T12:00:00+01:00'));
+ assert.equal(await page.evaluate(id=>streak(state.tasks.find(t=>t.id===id)).current,taskId),1);
+ await page.reload();
+ assert.deepEqual(await page.evaluate(id=>state.tasks.find(t=>t.id===id).paused,taskId),['2026-11-02','2026-11-03','2026-11-04']);
+});
+
+test('undoing task/reward deletion preserves intervening completions and a new reward goal',async t=>{
+ const page=await open(t),taskId=await page.evaluate(()=>state.tasks[0].id);
+ await page.locator(`[data-action=editTask][data-id="${taskId}"]`).click();
+ page.once('dialog',d=>d.accept());await page.locator('[data-action=deleteTask]').click();
+ assert.equal(await page.evaluate(id=>state.tasks.some(t=>t.id===id),taskId),false);
+ await page.locator('[data-action=toggle]').first().click();
+ const earned=await page.evaluate(()=>xp());
+ await page.locator('[data-workflow-action=undoDelete]').click();
+ assert.equal(await page.evaluate(id=>state.tasks.some(t=>t.id===id),taskId),true);
+ assert.equal(await page.evaluate(()=>xp()),earned);
+ const rewardId=await page.evaluate(()=>{state.wishId=state.rewards[0].id;save();rewardModal(state.rewards[0]);return state.rewards[0].id});
+ page.once('dialog',d=>d.accept());await page.locator('[data-action=deleteReward]').click();
+ const newWish=await page.evaluate(()=>{state.wishId=state.rewards[0].id;save();return state.wishId});
+ await page.locator('[data-workflow-action=undoDelete]').click();
+ assert.deepEqual(await page.evaluate(id=>[state.rewards.some(r=>r.id===id),state.wishId],rewardId),[true,newWish]);
+});
+
+test('local checkpoint survives reload and restores XP/reset and pre-import state',async t=>{
+ const page=await open(t);await page.locator('[data-action=toggle]').first().click();
+ const original=await page.evaluate(()=>[xp(),wallet(),state.tasks.length]);
+ await page.evaluate(()=>{tab='settings';render()});
+ page.once('dialog',d=>d.accept());await page.locator('[data-action=resetXP]').click();
+ await page.waitForFunction(()=>xp()===0);
+ await page.reload();await page.evaluate(()=>{tab='settings';render()});
+ page.once('dialog',d=>d.dismiss());await page.locator('[data-workflow-action=restoreCheckpoint]').click();
+ assert.equal(await page.evaluate(()=>xp()),0);
+ page.once('dialog',d=>d.accept());await page.locator('[data-workflow-action=restoreCheckpoint]').click();
+ await page.waitForFunction(()=>xp()>0);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.tasks.length]),original);
+ page.once('dialog',d=>d.accept());await importFile(page,JSON.stringify({tasks:[],rewards:[],ledger:[],history:[]}));
+ await page.getByText('Mentés importálva',{exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>state.tasks.length),0);
+ page.once('dialog',d=>d.accept());await page.locator('[data-workflow-action=restoreCheckpoint]').click();
+ await page.waitForFunction(()=>state.tasks.length>0);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.tasks.length]),original);
+});
+
+test('a saved checkpoint can recover an unreadable primary save',async t=>{
+ const page=await open(t);
+ await page.locator('[data-action=toggle]').first().click();const points=await page.evaluate(()=>xp());
+ await page.evaluate(()=>{replaceWithCheckpoint(migrate(seed()),'Törlés előtt');localStorage.setItem(KEY,'broken-json')});
+ await page.reload();assert.match(await page.locator('#view').innerText(),/A mentés nem tölthető be/);
+ page.once('dialog',d=>d.accept());await page.locator('[data-workflow-action=restoreCheckpoint]').click();
+ await page.waitForFunction(()=>!recoveryRequired);
+ assert.equal(await page.evaluate(()=>xp()),points);
+});
+
+test('a failed primary write rolls back checkpoint changes without losing either previous state',async t=>{
+ const page=await open(t);
+ await page.evaluate(()=>{replaceWithCheckpoint(migrate(seed()),'Első pont');toggle(state.tasks[0])});
+ const before=await page.evaluate(()=>[localStorage.getItem(KEY),localStorage.getItem(KEY+'-restore')]);
+ const result=await page.evaluate(()=>{
+  const original=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key===KEY)throw Error('QuotaExceededError');return original.call(this,key,value)};
+  const saved=replaceWithCheckpoint(migrate(seed()),'Második pont');Storage.prototype.setItem=original;
+  return [saved,xp(),localStorage.getItem(KEY),localStorage.getItem(KEY+'-restore')];
+ });
+ assert.deepEqual(result,[false,20,...before]);
 });
