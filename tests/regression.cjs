@@ -21,7 +21,7 @@ async function open(t, stored) {
   // Serve repository assets without a network service or external requests.
   await context.route('https://levelup.test/**', async route => {
     const name = new URL(route.request().url()).pathname.slice(1) || 'index.html';
-    if (!['index.html', 'app.js', 'pastel.css', 'manifest.webmanifest', 'icon.svg'].includes(name)) {
+    if (!['index.html', 'app.js', 'features.js', 'pastel.css', 'manifest.webmanifest', 'icon.svg'].includes(name)) {
       return route.abort();
     }
     await route.fulfill({
@@ -280,4 +280,138 @@ test('XP goal shares momentum card and task groups stay compact across categorie
   assert.equal(await page.locator('[data-mission-kind=todo] .task-row').count(), 1);
   await page.locator('[data-group="missions:habit"]').click();
   assert.equal(await page.locator('[data-mission-kind=habit] .task-row').count(), 3);
+});
+
+test('emoji choices open on demand in task and reward editors', async t=>{
+  const page=await open(t);
+  for(const kind of ['task','reward']){
+    await page.evaluate(kind=>kind==='task'?taskModal(state.tasks[0]):rewardModal(state.rewards[0]),kind);
+    const form=page.locator(kind==='task'?'#taskForm':'#rewardForm');
+    assert.equal(await form.locator('.emoji-grid').isVisible(),false);
+    await form.getByRole('button',{name:'Emoji kiválasztása',exact:true}).click();
+    assert.equal(await form.locator('.emoji-grid').isVisible(),true);
+    await form.locator('[data-emoji="🎨"]').click();
+    assert.equal(await form.locator('.emoji-grid').isVisible(),false);
+    assert.equal(await form.locator('.selected-emoji').innerText(),'🎨');
+    await form.locator('button[type=submit]').click();
+    await page.reload();
+    assert.equal(await page.evaluate(kind=>kind==='task'?state.tasks[0].emoji:state.rewards[0].emoji,kind),'🎨');
+  }
+});
+
+test('subtasks can be edited and reordered without losing unchanged daily checks or awarding XP',async t=>{
+  const page=await open(t),taskId=await page.evaluate(()=>state.tasks[0].id);
+  await page.locator(`[data-action=editTask][data-id="${taskId}"]`).click();
+  await page.locator('#subtaskEditor').fill('Porszívózás\nFelmosás');
+  await page.locator('#taskForm button[type=submit]').click();
+  await page.locator(`[data-action=subtasks][data-id="${taskId}"]`).click();
+  await page.locator('[data-sub="0"]').check();
+  assert.equal(await page.evaluate(()=>xp()),0);
+  await page.locator('[data-action=close]').click();
+  await page.locator(`[data-action=editTask][data-id="${taskId}"]`).click();
+  await page.locator('#subtaskEditor').fill('Felmosás\nPorszívózás\nFürdő');
+  await page.locator('#taskForm button[type=submit]').click();
+  await page.reload();
+  await page.locator(`[data-action=subtasks][data-id="${taskId}"]`).click();
+  assert.equal(await page.locator('[data-sub="1"]').isChecked(),true);
+  assert.equal(await page.locator('[data-sub="0"]').isChecked(),false);
+  assert.equal(await page.locator('#subtaskProgress').innerText(),'1/3 lépés kész');
+  await page.locator('[data-action=close]').click();
+  await page.evaluate(()=>{selectedDate=shift(day(),1);render()});
+  await page.locator(`[data-action=subtasks][data-id="${taskId}"]`).click();
+  assert.equal(await page.locator('[data-sub="1"]').isChecked(),false);
+  assert.equal(await page.locator('[data-sub="1"]').isDisabled(),true);
+});
+
+test('weekly review compares matching weekdays and respects pauses and weekly targets',async t=>{
+  const page=await open(t);
+  await page.clock.install({time:new Date('2026-11-04T12:00:00+01:00')});
+  await page.evaluate(()=>{
+    state=migrate(seed());const daily=state.tasks[0],weekly=state.tasks[2];
+    daily.created=weekly.created='2026-10-19';daily.paused=['2026-11-04'];weekly.weeklyTarget=2;
+    daily.days=['2026-11-02','2026-11-03','2026-10-29'];weekly.days=['2026-11-02'];state.tasks=[daily,weekly];
+    state.history=state.tasks.flatMap(task=>task.days.map(date=>({id:id(),type:'task',taskId:task.id,name:task.name,points:task.points,date})));
+    state.history.push({id:id(),type:'task',taskId:'old-task',name:'Korábbi feladat',points:10,date:'2026-10-26'});
+    tab='stats';render();
+  });
+  assert.match(await page.locator('.review-comparison').innerText(),/\+2 teljesítés/);
+  assert.match(await page.locator('.review-insight').innerText(),/30 perc olvasás/);
+  await page.locator('.weekly-review summary').click();
+  assert.match(await page.locator('.review-habit').nth(0).innerText(),/2\/2/);
+  assert.match(await page.locator('.review-habit').nth(1).innerText(),/1\/2/);
+});
+
+async function showFocus(page){
+  await page.locator('[data-action=more]').click();
+  await page.locator('#modalRoot [data-tab=focus]').click();
+}
+test('focus survives reload and pause, settles a closed block once, and resets safely',async t=>{
+  const page=await open(t);await showFocus(page);
+  await page.locator('[data-action=focusStart]').click();
+  await page.waitForFunction(()=>state.focusTimer?.running);
+  const session=await page.evaluate(()=>state.focusTimer.sessionId);
+  await page.reload();await showFocus(page);
+  assert.equal(await page.evaluate(()=>focus.sessionId),session);
+  await page.locator('[data-action=focusStart]').click();
+  await page.waitForFunction(()=>state.focusTimer?.running===false);
+  const paused=await page.evaluate(()=>focus.remaining);
+  await page.reload();await showFocus(page);
+  assert.equal(await page.evaluate(()=>focus.remaining),paused);
+  await page.locator('[data-action=focusStart]').click();
+  await page.waitForFunction(()=>state.focusTimer?.running);
+  await page.evaluate(()=>{const saved=JSON.parse(localStorage.getItem(KEY));saved.focusTimer.end=Date.now()-2000;localStorage.setItem(KEY,JSON.stringify(saved))});
+  await page.reload();await page.waitForFunction(()=>state.focusSessions.length===1);
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions[0].id]),[15,15,session]);
+  await page.reload();
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions.length]),[15,15,1]);
+  await showFocus(page);await page.locator('[data-action=focusStart]').click();
+  await page.waitForFunction(()=>state.focusTimer.running);
+  await page.locator('[data-action=focusReset]').click();
+  await page.waitForFunction(()=>!state.focusTimer.running);
+  await page.reload();
+  assert.deepEqual(await page.evaluate(()=>[focus.running,focus.remaining,state.focusSessions.length]),[false,1500,1]);
+});
+
+test('two tabs settle an expired focus session without duplicate credit',async t=>{
+  const page=await open(t);await showFocus(page);await page.locator('[data-action=focusStart]').click();
+  await page.waitForFunction(()=>state.focusTimer?.running);
+  await page.evaluate(()=>{const saved=JSON.parse(localStorage.getItem(KEY));saved.focusTimer.end=Date.now()-1000;localStorage.setItem(KEY,JSON.stringify(saved))});
+  const other=await page.context().newPage();
+  await Promise.all([page.reload(),other.goto('https://levelup.test/')]);
+  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('levelup-v1')).focusSessions.length===1);
+  await other.reload();
+  assert.deepEqual(await other.evaluate(()=>[xp(),wallet(),state.history.filter(h=>h.type==='focus').length]),[15,15,1]);
+});
+
+test('XP reset preserves completions, confirms intent, and old undo cannot subtract new XP',async t=>{
+  const page=await open(t);
+  const taskId=await page.evaluate(()=>{toggle(state.tasks[0]);tab='settings';render();return state.tasks[0].id});
+  page.once('dialog',d=>d.dismiss());await page.locator('[data-action=resetXP]').click();
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[20,20]);
+  page.once('dialog',d=>d.accept());await page.locator('[data-action=resetXP]').click();
+  await page.waitForFunction(()=>xp()===0);
+  await page.reload();
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),level(),state.tasks[0].days.length,state.history.length,pointsOn(day())]),[0,0,1,1,1,0]);
+  await page.locator(`[data-action=toggle][data-id="${taskId}"]`).click();
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[0,0]);
+  await page.locator(`[data-action=toggle][data-id="${taskId}"]`).click();
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[20,20]);
+});
+
+test('storage failures do not partially reset XP or award a focus block',async t=>{
+  const page=await open(t);
+  await page.evaluate(()=>{toggle(state.tasks[0]);tab='settings';render();window.realSetItem=Storage.prototype.setItem;Storage.prototype.setItem=()=>{throw Error('QuotaExceededError')}});
+  page.once('dialog',d=>d.accept());await page.locator('[data-action=resetXP]').click();
+  await page.getByText('Mentés sikertelen – a korábbi adatok változatlanok.',{exact:true}).waitFor();
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.history[0].xpReset===true]),[20,20,false]);
+  await page.evaluate(()=>{Storage.prototype.setItem=window.realSetItem});
+  await showFocus(page);await page.locator('[data-action=focusStart]').click();
+  await page.waitForFunction(()=>state.focusTimer?.running);
+  await page.evaluate(async()=>{
+    state.focusTimer.end=Date.now()-2000;save();focus=normalizeFocus(state.focusTimer);
+    Storage.prototype.setItem=()=>{throw Error('QuotaExceededError')};await focusTick();
+  });
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions.length]),[20,20,0]);
+  await page.evaluate(async()=>{Storage.prototype.setItem=window.realSetItem;await focusTick()});
+  assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions.length]),[35,35,1]);
 });
