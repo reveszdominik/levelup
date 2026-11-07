@@ -14,6 +14,11 @@ function normalizeGame(s){
  if(!s.ui.blocks.includes('progress'))s.ui.blocks.unshift('progress');
  if(!s.ui.gameLayoutV8&&s.ui.blocks.join(',')==='progress,tasks,quests,wish')s.ui.blocks=['progress','quests','tasks','wish'];
  s.ui.gameLayoutV8=true;
+ if(!s.ui.challengeLayoutV1){
+  s.ui.blocks=['progress','quests','calendar','tasks',...s.ui.blocks.filter(key=>!['progress','quests','calendar','tasks'].includes(key))];
+  s.ui.challengeLayoutV1=true;
+ }
+ if(!s.ui.blocks.includes('calendar'))s.ui.blocks.splice(Math.max(0,s.ui.blocks.indexOf('tasks')),0,'calendar');
  return s;
 }
 function taskDoneIds(s,date){
@@ -90,11 +95,14 @@ function dailyDevelopmentHTML(visible){
 }
 function miniMissionsHTML(){
  const plan=state.dailyMissions[day()],complete=plan.missions.filter(m=>m.completed).length;
- const weekly=quests().find(q=>q.key.startsWith('weekly10:'));
- return `<details class="card fold-card daily-mini-quests" ${state.ui.miniQuestsOpen?'open':''}><summary><strong>Mai küldetések</strong><span class="mini-count">${complete}/3 kész <span aria-hidden="true">⌄</span></span></summary><div class="mini-quest-list">${plan.missions.map(m=>{
+ const weeklyQuest=quests().find(q=>q.key.startsWith('weekly10:'));
+ const weekly=weeklyQuest&&(weeklyQuest.progress>0||state.questClaims.includes(weeklyQuest.key))?weeklyQuest:null;
+ const challenges=weekChallenges();
+ const weeklyHTML=challenges||weekly?`<section class="challenge-group challenge-group-weekly" aria-labelledby="weeklyChallengesTitle"><h3 id="weeklyChallengesTitle">Heti kihívások</h3>${challenges}${weekly?`<div class="item weekly-bonus"><div class="grow"><div class="name">Aktív hét</div><div class="muted">${Math.min(weekly.progress,weekly.target)} / ${weekly.target} teljesítés · +${weekly.points} XP</div><div class="progress" role="progressbar" aria-label="Aktív hét" aria-valuemin="0" aria-valuemax="${weekly.target}" aria-valuenow="${Math.min(weekly.progress,weekly.target)}"><div class="bar" style="width:${Math.min(100,100*weekly.progress/weekly.target)}%"></div></div></div><button class="btn small" data-action="claim" data-id="${weekly.key}" ${weekly.progress<weekly.target||state.questClaims.includes(weekly.key)?'disabled':''}>${state.questClaims.includes(weekly.key)?'Átvéve':weekly.progress>=weekly.target?'Átveszem':'Folyamatban'}</button></div>`:''}</section>`:'';
+ return `<details class="card fold-card daily-mini-quests" ${state.ui.miniQuestsOpen?'open':''}><summary><strong>Kihívások</strong><span class="mini-count">${complete}/3 ma <span aria-hidden="true">⌄</span></span></summary>${weeklyHTML}<section class="challenge-group challenge-group-daily" aria-labelledby="dailyMissionsTitle"><h3 id="dailyMissionsTitle">Mai küldetések</h3><div class="mini-quest-list">${plan.missions.map(m=>{
   const progress=m.claimed?m.target:Math.min(m.target,missionProgress(state,m,day()));
   return `<div class="mini-quest" data-mini-slot="${m.slot}"><div class="mini-quest-body"><div class="mini-quest-heading"><strong>${esc(missionTitle(m))}</strong><span>+${m.points} XP</span></div><div class="mini-quest-progress"><div class="progress" role="progressbar" aria-label="${esc(missionTitle(m))}" aria-valuemin="0" aria-valuemax="${m.target}" aria-valuenow="${progress}"><div class="bar" style="width:${Math.min(100,progress/m.target*100)}%"></div></div><span>${progress}/${m.target}${m.kind==='xp'?' XP':''}</span></div>${m.kind==='xp'?'<small class="mini-quest-note">Bónusz XP nélkül</small>':''}</div><button class="btn small" data-game-action="claimMini" data-slot="${m.slot}" data-date="${day()}" ${!m.completed||m.claimed?'disabled':''}>${m.claimed?'✓ Átvéve':m.completed?'Átveszem':'Folyamatban'}</button></div>`;
- }).join('')}</div>${weekly?`<details class="weekly-extra"><summary>Heti bónusz · +${weekly.points} XP</summary><div class="mini-quest-footer"><span>${Math.min(weekly.progress,weekly.target)} / ${weekly.target} teljesítés</span><button class="btn small" data-action="claim" data-id="${weekly.key}" ${weekly.progress<weekly.target||state.questClaims.includes(weekly.key)?'disabled':''}>${state.questClaims.includes(weekly.key)?'Átvéve':'Átvétel'}</button></div></details>`:''}</details>`;
+ }).join('')}</div></section></details>`;
 }
 
 function gameMetrics(s){return {level:gameLevel(s),xp:gameXP(s),daily:gameXP(s,day()),goal:s.settings.dailyXPGoal,maxLevel:s.gameFeedback.maxLevel,goalShown:!!s.gameFeedback.goalDays[day()]}}
