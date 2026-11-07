@@ -87,11 +87,15 @@ function activityStreak(s,date=day()){
  let current=days.has(date)?date:shift(date,-1),count=0;
  while(days.has(current)&&count<=days.size){count++;current=shift(current,-1)}return count;
 }
+function streakBadgeHTML(date=day()){
+ const series=activityStreak(state,date);
+ return `<span class="development-streak" aria-label="${series} napos aktivitási sorozat"><span aria-hidden="true">⚡</span> ${series} nap</span>`;
+}
 function dailyDevelopmentHTML(visible,{compact=false,date=selectedDate}={}){
- const n=Math.max(0,gameXP(state,date)),goal=state.settings.dailyXPGoal,series=activityStreak(state,date),currentLevel=gameLevel(state);
+ const n=Math.max(0,gameXP(state,date)),goal=state.settings.dailyXPGoal,currentLevel=gameLevel(state);
  const done=visible.filter(t=>isDone(t,date)).length;
 
- return `<section class="card daily-progress daily-development ${compact?'daily-summary':'level-development'}" data-date="${date}" aria-label="${compact?'Napi fejlődés':'Szint és napi fejlődés'}">${compact?'':`<div class="development-top"><div class="development-level"><button type="button" class="development-star" data-action="xpDetail" aria-label="XP részletezése"><span aria-hidden="true">✦</span></button><strong>${currentLevel}. szint</strong></div><span class="development-streak" aria-label="${series} napos aktivitási sorozat"><span aria-hidden="true">⚡</span> ${series} nap</span></div>`}<div class="development-score"><div><strong>${n}</strong><span> / ${goal} XP</span></div><span class="goal-status">${n>=goal?'✓ Napi cél':'Napi fejlődés'}</span></div><div class="progress" role="progressbar" aria-label="Napi XP-cél" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(n,goal)}" aria-valuetext="${n} a ${goal} XP-ből"><div class="bar" style="width:${Math.min(100,n/goal*100)}%"></div></div><div class="development-footer"><span class="momentum-tasks">${done} / ${visible.length} feladat kész</span><span>${wallet()} elkölthető pont</span></div></section>`;
+ return `<section class="card daily-progress daily-development ${compact?'daily-summary':'level-development'}" data-date="${date}" aria-label="${compact?'Napi fejlődés':'Szint és napi fejlődés'}">${compact?'':`<div class="development-top"><div class="development-level"><button type="button" class="development-star" data-action="xpDetail" aria-label="XP részletezése"><span aria-hidden="true">✦</span></button><strong>${currentLevel}. szint</strong></div>${streakBadgeHTML(date)}</div>`}<div class="development-score"><div><strong>${n}</strong><span> / ${goal} XP</span></div><span class="goal-status">${n>=goal?'✓ Napi cél':'Napi fejlődés'}</span></div><div class="progress" role="progressbar" aria-label="Napi XP-cél" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(n,goal)}" aria-valuetext="${n} a ${goal} XP-ből"><div class="bar" style="width:${Math.min(100,n/goal*100)}%"></div></div><div class="development-footer"><span class="momentum-tasks">${done} / ${visible.length} feladat kész</span><span>${wallet()} elkölthető pont</span></div></section>`;
 }
 function miniMissionsHTML(){
  const plan=state.dailyMissions[day()],complete=plan.missions.filter(m=>m.completed).length;
