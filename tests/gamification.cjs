@@ -53,9 +53,7 @@ async function oneHabit(page,points=20){
  await page.evaluate(points=>{state=migrate(seed());const task=state.tasks[0];task.points=points;state.tasks=[task];save();render()},points);
 }
 async function miniButton(page,slot){
- if(!await page.locator('.daily-mini-quests').getAttribute('open')){
-  if(!await page.locator('.daily-mini-quests').evaluate(e=>e.open))await page.locator('.daily-mini-quests > summary').click();
- }
+ if(!await page.locator('.daily-mini-quests').count())await page.locator('[data-tab=planner]').click();
  return page.locator(`[data-game-action=claimMini][data-slot=${slot}]`);
 }
 
