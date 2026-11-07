@@ -32,9 +32,16 @@ document.addEventListener('toggle',event=>{
  const open=event.target.open;if((state.ui.overdueOpen===true)===open)return;
  const next=JSON.parse(JSON.stringify(state));next.ui.overdueOpen=open;replaceState(next);
 },true);
-function missionControls(){
- const active=state.ui.missionFilter!=='all';
- return `<details class="home-filter-menu"><summary class="icon-button home-filter-toggle ${active?'is-filtered':''}" data-filter-toggle aria-label="Feladatok szűrése" aria-controls="homeFilterOptions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg>${active?'<span class="filter-dot" aria-hidden="true"></span>':''}<span class="sr-only">Aktív: ${({all:'Összes',pending:'Hátralévő',done:'Kész'})[state.ui.missionFilter]}</span></summary><div class="home-filter-options" id="homeFilterOptions" role="group" aria-label="Feladatok szűrése">${[['all','Összes'],['pending','Hátralévő'],['done','Kész']].map(([value,label])=>`<button type="button" data-workflow-action="filter" data-value="${value}" aria-pressed="${state.ui.missionFilter===value}">${label}<span aria-hidden="true">${state.ui.missionFilter===value?'✓':''}</span></button>`).join('')}</div></details>`;
+function filterMenuHTML(value,options,action,label){
+ const active=value!=='all',current=options.find(([key])=>key===value)?.[1]||options[0][1];
+ return `<details class="home-filter-menu"><summary class="icon-button home-filter-toggle ${active?'is-filtered':''}" data-filter-toggle aria-label="${esc(label)}" aria-controls="homeFilterOptions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg>${active?'<span class="filter-dot" aria-hidden="true"></span>':''}<span class="sr-only">Aktív: ${esc(current)}</span></summary><div class="home-filter-options" id="homeFilterOptions" role="group" aria-label="${esc(label)}">${options.map(([key,text])=>`<button type="button" data-workflow-action="${action}" data-value="${key}" aria-pressed="${value===key}">${esc(text)}<span aria-hidden="true">${value===key?'✓':''}</span></button>`).join('')}</div></details>`;
+}
+function missionControls(){return filterMenuHTML(state.ui.missionFilter,[['all','Összes'],['pending','Hátralévő'],['done','Kész']],'filter','Feladatok szűrése')}
+function rewardControls(){return filterMenuHTML(state.ui.rewardFilter,[['all','Összes'],['affordable','Beváltható'],['saving','Még gyűjtök'],['goal','Célom']],'rewardFilter','Jutalmak szűrése')}
+function setRewardFilter(value){
+ if(!['all','affordable','saving','goal'].includes(value))return;
+ const next=JSON.parse(JSON.stringify(state));next.ui.rewardFilter=value;
+ if(replaceState(next)){render();document.querySelector('[data-filter-toggle]')?.focus({preventScroll:true})}
 }
 document.addEventListener('click',event=>{
  const menu=document.querySelector('.home-filter-menu');
@@ -142,6 +149,10 @@ document.addEventListener('click',event=>{
  if(action==='filter'){
   const value=button.dataset.value;if(!['all','pending','done'].includes(value))return;
   const next=JSON.parse(JSON.stringify(state));next.ui.missionFilter=value;if(replaceState(next)){render();document.querySelector('[data-filter-toggle]')?.focus({preventScroll:true})}
+ }else if(action==='rewardFilter'){
+  setRewardFilter(button.dataset.value);
+ }else if(action==='clearRewardFilters'){
+  setRewardFilter('all');
  }else if(action==='search'){
   missionSearchOpen=!missionSearchOpen;if(!missionSearchOpen)missionSearch='';render();$('#missionSearch')?.focus();
  }else if(action==='clearSearch'){
