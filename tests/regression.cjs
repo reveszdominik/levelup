@@ -740,14 +740,17 @@ test('reward icon buttons preserve editing, goals, confirmation, debit and timed
  const rewardId=await page.evaluate(()=>{state.rewards[0].cost=30;state.rewards[0].minutes=5;save();render();return state.rewards[0].id});
  await page.locator('#nav [data-tab=rewards]').click();
  const row=page.locator(`[data-reward-id="${rewardId}"]`);
- assert.equal(await row.locator('.reward-actions button').count(),3);
+ assert.equal(await row.locator('.reward-actions button').count(),2);
+ assert.equal(await row.locator('.reward-edit').count(),1);
+ assert.equal(await row.locator('.reward-xp').innerText(),'−30\nXP');
  assert.equal(await row.locator('[data-action=redeem]').isDisabled(),true);
- assert.equal(await row.locator('[data-action=editReward]').innerText(),'⚙️');
+ assert.equal(await row.locator('[data-action=editReward]').innerText(),'🎮');
+ assert.equal(await row.locator('.reward-actions [data-action=editReward]').count(),0);
  assert.equal(await row.locator('[data-action=wish]').innerText(),'🎯');
  assert.equal(await row.locator('[data-action=redeem]').innerText(),'✓');
  await page.evaluate(async()=>{await toggle(state.tasks[0]);await toggle(state.tasks[1])});
  assert.equal(await row.locator('[data-action=redeem]').isEnabled(),true);
- const buttons=await row.locator('.reward-actions button').evaluateAll(items=>items.map(el=>({height:el.getBoundingClientRect().height,width:el.getBoundingClientRect().width,top:el.getBoundingClientRect().top})));
+ const buttons=await row.locator('button').evaluateAll(items=>items.map(el=>({height:el.getBoundingClientRect().height,width:el.getBoundingClientRect().width,top:el.getBoundingClientRect().top})));
  assert.equal(buttons.every(rect=>rect.height===44&&rect.width===44&&rect.top===buttons[0].top),true);
  await row.locator('[data-action=wish]').click();
  assert.equal(await row.locator('[data-action=wish]').getAttribute('aria-pressed'),'true');
@@ -796,7 +799,7 @@ test('legacy rewards keep their data while categories, grouped rows and collapsi
  assert.match(await history.locator('.reward-history-content').innerText(),/Korábbi jutalom/);
  await page.reload();await page.locator('#nav [data-tab=rewards]').click();
  assert.equal(await history.evaluate(el=>el.open),true);
- const rewardId=await page.evaluate(()=>{state.categories.push('Pihenés');save();render();return state.rewards[0].id});
+ const rewardId=await page.evaluate(()=>{state.rewardCategories.push('Pihenés','Tanulás');save();render();return state.rewards[0].id});
  await page.locator(`[data-reward-id="${rewardId}"] [data-action=editReward]`).click();
  await page.locator('#rewardForm [name=category]').selectOption('Pihenés');
  await page.locator('#rewardForm button[type=submit]').click();
@@ -812,7 +815,7 @@ test('legacy rewards keep their data while categories, grouped rows and collapsi
  await group.locator('.mission-group-heading').click();
  assert.equal(await group.locator('.reward-row').count(),1);
  await page.evaluate(()=>{tab='settings';render()});
- assert.equal(await page.locator('[data-action=deleteCategory][data-category="Pihenés"]').isDisabled(),true);
+ assert.equal(await page.locator('[data-workflow-action=deleteRewardCategory][data-category="Pihenés"]').isDisabled(),true);
  await page.reload();await page.locator('#nav [data-tab=rewards]').click();
  assert.equal(await page.locator(`[data-reward-id="${rewardId}"] .reward-category`).innerText(),'Pihenés');
  assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.history.length,state.rewards.length]),[80,75,2,3]);
@@ -883,4 +886,42 @@ test('legacy reward deadlines survive migration and failed or repeated redemptio
  await page.evaluate(()=>{Storage.prototype.setItem=window.realRewardSetItem;window.rewardConfirmations=0;window.confirm=()=>{window.rewardConfirmations++;return true}});
  await page.evaluate(async()=>{await Promise.all([redeemReward(state.rewards[0].id),redeemReward(state.rewards[0].id)])});
  assert.deepEqual(await page.evaluate(()=>[window.rewardConfirmations,xp(),wallet(),state.activeRewards.length,state.history.filter(h=>h.type==='reward').length]),[1,100,90,2,1]);
+});
+
+
+test('reward category migration and settings remain independent from habit and todo categories',async t=>{
+ const page=await open(t);
+ const oldSave=await page.evaluate(()=>{
+  const data=seed();data.categories.push('Játék','Csak feladat');data.rewards[0].category='Játék';data.rewards[1].category='Pihenés';return JSON.stringify(data);
+ });
+ await page.evaluate(raw=>localStorage.setItem(KEY,raw),oldSave);await page.reload();
+ assert.deepEqual(await page.evaluate(()=>state.rewardCategories),['Egyéb','Játék','Pihenés']);
+ assert.equal(await page.evaluate(()=>state.rewardCategories.includes('Csak feladat')),false);
+ const taskCategories=await page.evaluate(()=>[...state.categories]);
+ await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-tab=settings]').click();
+ assert.equal(await page.getByRole('heading',{name:'Jutalomkategóriák',exact:true}).count(),1);
+ assert.equal(await page.getByRole('heading',{name:'Szokások és teendők kategóriái',exact:true}).count(),1);
+ await page.locator('#rewardCategoryForm [name=category]').fill('Digitális');await page.locator('#rewardCategoryForm button[type=submit]').click();
+ assert.deepEqual(await page.evaluate(()=>state.categories),taskCategories);
+ await page.locator('#categoryForm [name=category]').fill('Bevásárlás');await page.locator('#categoryForm button[type=submit]').click();
+ assert.equal(await page.evaluate(()=>state.rewardCategories.includes('Bevásárlás')),false);
+ await page.locator('#rewardCategoryForm [name=category]').fill('Otthon');await page.locator('#rewardCategoryForm button[type=submit]').click();
+ await page.locator('[data-workflow-action=deleteRewardCategory][data-category="Otthon"]').click();
+ assert.equal(await page.evaluate(()=>state.categories.includes('Otthon')),true);
+ assert.equal(await page.evaluate(()=>state.rewardCategories.includes('Otthon')),false);
+ assert.equal(await page.locator('[data-workflow-action=deleteRewardCategory][data-category="Játék"]').isDisabled(),true);
+ assert.equal(await page.locator('[data-action=deleteCategory][data-category="Játék"]').isEnabled(),true);
+ await page.locator('[data-action=deleteCategory][data-category="Játék"]').click();
+ assert.equal(await page.evaluate(()=>state.rewardCategories.includes('Játék')),true);
+ assert.equal(await page.evaluate(()=>state.rewards[0].category),'Játék');
+ await page.locator('#nav [data-tab=rewards]').click();await page.locator('#homeActions [data-action=editReward]').click();
+ const options=await page.locator('#rewardForm [name=category] option').allTextContents();
+ assert.ok(options.includes('Digitális'));assert.ok(options.includes('Játék'));assert.ok(!options.includes('Bevásárlás'));assert.ok(!options.includes('Munka'));
+ await page.locator('#rewardForm [name=name]').fill('Digitális ajándék');await page.locator('#rewardForm [name=category]').selectOption('Digitális');
+ await page.locator('#rewardForm button[type=submit]').click();
+ const rewardId=await page.evaluate(()=>state.rewards.at(-1).id);
+ assert.equal(await page.locator(`[data-reward-id="${rewardId}"] .reward-category`).innerText(),'Digitális');
+ await page.reload();await page.locator('#nav [data-tab=rewards]').click();
+ assert.equal(await page.locator(`[data-reward-id="${rewardId}"] .reward-category`).innerText(),'Digitális');
+ assert.deepEqual(await page.evaluate(()=>[state.categories.includes('Digitális'),state.rewardCategories.includes('Bevásárlás'),xp(),wallet()]),[false,false,0,0]);
 });
