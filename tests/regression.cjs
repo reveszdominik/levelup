@@ -12,10 +12,10 @@ before(async () => {
   });
 });
 after(async () => { await browser?.close(); });
-async function open(t, stored) {
+async function open(t, stored, options = {}) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Budapest',
-    serviceWorkers: 'block', acceptDownloads: true,
+    serviceWorkers: 'block', acceptDownloads: true, ...options,
   });
   t.after(() => context.close());
   // Serve repository assets without a network service or external requests.
@@ -48,6 +48,13 @@ async function importFile(page, value) {
 }
 
 async function clickTask(page,button){await button.click();await page.waitForFunction(()=>pendingTaskAwards.size===0)}
+
+async function addTodo(page,name,points=10){
+ await page.locator('.home-add').click();
+ await page.locator('#taskForm [name=name]').fill(name);
+ await page.locator('#taskForm [name=points]').fill(String(points));
+ await page.locator('#taskForm button[type=submit]').click();
+}
 
 test('unreadable saves survive boot, reload and raw export byte for byte', async t => {
   for (const raw of ['broken-json', 'null', '{}', '{"tasks":[null],"rewards":[],"ledger":[],"history":[]}']) {
@@ -183,15 +190,17 @@ test('home preferences, reward shortcut and more menu preserve existing data', a
   assert.equal(await page.locator('[data-home-block=progress]').isVisible(), false);
 });
 
-test('quick entry creates one dated todo without awarding XP and supports later editing', async t => {
+test('header add opens the full editor for dated todos and habits without awarding XP', async t => {
   const page = await open(t);
   const before = await page.evaluate(() => state.tasks.length);
-  await page.locator('#quickTaskName').fill('  Bevásárlás  ');
-  await page.locator('#quickTaskName').press('Enter');
+  await page.locator('.home-add').click();
+  assert.equal(await page.locator('#taskForm [name=points]').inputValue(),'20');
+  await page.locator('#taskForm [name=name]').fill('  Bevásárlás  ');
+  await page.locator('#taskForm button[type=submit]').click();
   assert.deepEqual(await page.evaluate(() => {
     const task = state.tasks.at(-1);
     return [state.tasks.length, task.name, task.kind, task.points, task.dueDate===day(), xp(), wallet()];
-  }), [before+1, 'Bevásárlás', 'todo', 10, true, 0, 0]);
+  }), [before+1, 'Bevásárlás', 'todo', 20, true, 0, 0]);
   const taskId = await page.evaluate(() => state.tasks.at(-1).id);
   await page.locator(`[data-action=editTask][data-id="${taskId}"]`).click();
   await page.locator('#taskForm [name=points]').fill('25');
@@ -201,17 +210,23 @@ test('quick entry creates one dated todo without awarding XP and supports later 
     const task = state.tasks.find(t=>t.id===id); return [task.name, task.points, task.kind];
   }, taskId), ['Bevásárlás', 25, 'todo']);
   await page.evaluate(() => { selectedDate=shift(day(),1);render(); });
-  await page.locator('#quickTaskName').fill('Holnapi teendő');
-  await page.locator('#quickTaskName').press('Enter');
+  await addTodo(page,'Holnapi teendő');
   const lastId = await page.evaluate(() => state.tasks.at(-1).id);
   assert.equal(await page.locator(`[data-action=toggle][data-id="${lastId}"]`).isDisabled(), true);
   assert.equal(await page.evaluate(() => state.tasks.at(-1).dueDate===shift(day(),1)), true);
+  await page.evaluate(()=>{selectedDate=day();render()});
+  await page.locator('.home-add').click();
+  await page.locator('#taskForm [name=name]').fill('Új szokás');
+  await page.locator('#taskForm [name=kind]').selectOption('habit');
+  await page.locator('#taskForm button[type=submit]').click();
+  assert.deepEqual(await page.evaluate(()=>[state.tasks.at(-1).kind,state.tasks.at(-1).frequency,xp(),wallet()]),['habit','daily',0,0]);
 });
 
 test('daily highlight is date-specific, persistent, and gives no extra XP', async t => {
   const page = await open(t);
   const taskId = await page.evaluate(() => state.tasks[0].id);
-  await page.locator('[data-action=highlightModal]').click();
+  assert.equal(await page.locator('.mission-heading [data-action=highlightModal]').count(), 0);
+  await page.evaluate(() => highlightModal());
   await page.locator(`[data-action=setHighlight][data-id="${taskId}"]`).click();
   assert.equal(await page.locator('.daily-highlight-line').isVisible(), true);
   assert.equal(await page.locator('.task-highlighted').count(), 1);
@@ -418,28 +433,46 @@ test('storage failures do not partially reset XP or award a focus block',async t
   assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions.length]),[35,35,1]);
 });
 
-test('compact home has no greeting and search/status filters do not change daily totals',async t=>{
+test('header filter dropdown preserves status filtering, daily totals and current streak',async t=>{
  const page=await open(t);
  assert.equal(await page.locator('.head').isVisible(),false);
- assert.equal(await page.locator('.home-intro').count(),0);
+ assert.equal(await page.locator('.home-intro,.mission-heading,#quickTaskForm,.mission-filters').count(),0);
  assert.ok((await page.locator('.daily-development').boundingBox()).height<=220);
  const taskId=await page.evaluate(()=>state.tasks[0].id);
  await clickTask(page,page.locator(`[data-action=toggle][data-id="${taskId}"]`));
- await page.locator('[data-workflow-action=filter][data-value=done]').click();
+ const badge=await page.locator('.development-streak').innerText();
+ await page.evaluate(()=>{selectedDate=shift(day(),-7);render()});
+ assert.equal(await page.locator('.development-streak').innerText(),badge);
+ await page.locator('[data-action=dateToday]').click();
+ const choose=async value=>{
+  await page.locator('[data-filter-toggle]').click();
+  await page.locator(`[data-workflow-action=filter][data-value=${value}]`).click();
+  assert.equal(await page.locator('.home-filter-menu').evaluate(el=>el.open),false);
+ };
+ await choose('done');
  assert.equal(await page.locator('#missionResults .task-row').count(),1);
- await page.locator('[data-workflow-action=filter][data-value=pending]').click();
+ await choose('pending');
  assert.equal(await page.locator('#missionResults .task-row').count(),3);
  assert.match(await page.locator('.momentum-tasks').innerText(),/1 \/ 4/);
- await page.locator('[data-workflow-action=search]').click();
- await page.locator('#missionSearch').fill('porszivozas');
- assert.equal(await page.locator('#missionResults .task-row').count(),1);
- assert.match(await page.locator('#missionResults').innerText(),/Porszívózás/);
- await page.locator('#missionSearch').fill('nem létezik');
- assert.equal(await page.locator('#missionResults .task-row').count(),0);
- await page.locator('[data-workflow-action=clearFilters]').click();
- assert.equal(await page.locator('#missionResults .task-row').count(),4);
  await page.reload();
- assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.ui.missionFilter]),[20,20,'all']);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.ui.missionFilter]),[20,20,'pending']);
+ assert.equal(await page.locator('.filter-dot').count(),1);
+ assert.equal(await page.locator('#missionResults .task-row').count(),3);
+ await page.locator('[data-filter-toggle]').press('Enter');
+ assert.equal(await page.locator('.home-filter-menu').evaluate(el=>el.open),true);
+ await page.keyboard.press('Escape');
+ assert.equal(await page.locator('.home-filter-menu').evaluate(el=>el.open),false);
+ assert.equal(await page.locator('[data-filter-toggle]').evaluate(el=>el===document.activeElement),true);
+ await page.locator('[data-filter-toggle]').click();
+ await page.locator('.brand-name').click();
+ assert.equal(await page.locator('.home-filter-menu').evaluate(el=>el.open),false);
+ await choose('all');
+ assert.equal(await page.locator('.filter-dot').count(),0);
+ assert.equal(await page.locator('#missionResults .task-row').count(),4);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[20,20]);
+ await page.getByRole('button',{name:'Szint',exact:true}).click();
+ assert.equal(await page.locator('.development-streak').innerText(),badge);
+ assert.equal(await page.locator('#homeActions').isVisible(),false);
 });
 
 test('rescheduling keeps partial steps and completed todo dates cannot be rewritten',async t=>{
@@ -534,4 +567,130 @@ test('a failed primary write rolls back checkpoint changes without losing either
   return [saved,xp(),localStorage.getItem(KEY),localStorage.getItem(KEY+'-restore')];
  });
  assert.deepEqual(result,[false,20,...before]);
+});
+
+
+async function swipeCalendar(page,direction){
+ const rail=page.locator('.date-strip'),box=await rail.boundingBox();
+ const client=await page.context().newCDPSession(page);
+ const start=box.x+box.width*(direction>0?.85:.15),end=box.x+box.width*(direction>0?.15:.85),y=box.y+box.height/2;
+ await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:start,y}]});
+ for(let i=1;i<=12;i++){
+  await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:start+(end-start)*i/12,y}]});
+  await new Promise(resolve=>setTimeout(resolve,18));
+ }
+ await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await client.detach();
+}
+
+test('native calendar swipes cross weeks and years without changing XP, and support taps and keyboard',async t=>{
+ const page=await open(t,undefined,{hasTouch:true,isMobile:true});
+ await page.evaluate(async()=>{await toggle(state.tasks[0]);selectedDate='2026-12-30';render()});
+ const before=await page.evaluate(()=>JSON.stringify([state.tasks,state.ledger,state.history]));
+ assert.equal(await page.locator('[data-action=dateShift]').count(),0);
+ await swipeCalendar(page,1);
+ await page.waitForFunction(()=>selectedDate==='2027-01-06');
+ assert.match(await page.locator('.week-heading').innerText(),/2027.*január/i);
+ await swipeCalendar(page,-1);await page.waitForFunction(()=>selectedDate==='2026-12-30');
+ await swipeCalendar(page,-1);await page.waitForFunction(()=>selectedDate==='2026-12-23');
+ await page.locator('[data-action=dateSelect][data-date="2026-12-24"]').click();
+ assert.equal(await page.evaluate(()=>selectedDate),'2026-12-24');
+ await page.locator('.date-day.active').press('ArrowRight');
+ assert.equal(await page.evaluate(()=>selectedDate),'2026-12-25');
+ assert.equal(await page.locator('.date-day.active').evaluate(el=>el===document.activeElement),true);
+ await page.setViewportSize({width:320,height:844});
+ await page.waitForFunction(()=>Math.abs(document.querySelector('.date-strip').scrollLeft-document.querySelector('.date-strip').clientWidth)<2);
+ await page.locator('[data-action=dateToday]').click();
+ assert.equal(await page.evaluate(()=>selectedDate===day()),true);
+ assert.equal(await page.evaluate(()=>JSON.stringify([state.tasks,state.ledger,state.history])),before);
+ await page.locator('[data-tab=planner]').click();
+ assert.equal(await page.locator('.date-strip,.week-planner').count(),0);
+ assert.equal(await page.locator('.level-page > .card').count(),2);
+});
+
+test('header actions align with the streak and overdue tasks keep their steps when carried forward',async t=>{
+ const page=await open(t);
+ assert.equal(await page.locator('.brand-note,.development-message').count(),0);
+ await page.locator('[data-tab=planner]').click();
+ assert.match(await page.locator('.development-streak').innerText(),/⚡/);
+ assert.ok((await page.locator('.challenge-group-daily .mini-quest-list').boundingBox()).height<240);
+ await page.locator('[data-tab=today]').click();
+ const bounds=await page.locator('.home-add,.home-filter-toggle,#homeActions .development-streak').evaluateAll(items=>items.map(el=>({height:el.getBoundingClientRect().height,top:el.getBoundingClientRect().top})));
+ assert.equal(bounds.length,3);assert.equal(bounds[0].height,44);
+ assert.deepEqual(bounds[0],bounds[1]);assert.deepEqual(bounds[0],bounds[2]);
+ assert.equal(await page.locator('.home-add').evaluate(el=>el.getBoundingClientRect().width),44);
+ await addTodo(page,'Mai teendő');
+ assert.equal(await page.evaluate(()=>state.tasks.at(-1).dueDate===day()),true);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[0,0]);
+ const taskId=await page.evaluate(()=>{const task=state.tasks.find(t=>t.kind==='todo');task.created=shift(day(),-2);task.dueDate=task.created;state.subtaskChecks[task.id+':'+task.created]=[0];save();render();return task.id});
+ const overdue=page.locator('.overdue-card');
+ assert.equal(await overdue.evaluate(el=>el.open),false);
+ assert.equal(await page.locator(`[data-action=carry][data-id="${taskId}"]`).isVisible(),false);
+ await overdue.locator('summary').click();await page.reload();
+ assert.equal(await overdue.evaluate(el=>el.open),true);
+ await page.locator(`[data-action=carry][data-id="${taskId}"]`).click();
+ assert.equal(await page.locator('.overdue-card').count(),0);
+ assert.equal(await page.evaluate(taskId=>state.tasks.find(t=>t.id===taskId).dueDate===day(),taskId),true);
+ assert.deepEqual(await page.evaluate(taskId=>state.subtaskChecks[taskId+':'+day()],taskId),[0]);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[0,0]);
+});
+
+test('Szint tab keeps separate always-visible level and challenge cards while home stays compact',async t=>{
+ const page=await open(t);
+ assert.equal(await page.locator('#view > .week-calendar').count(),1);
+ assert.equal(await page.locator('.daily-mini-quests,.development-top,[data-action=xpDetail]').count(),0);
+ assert.equal(await page.locator('.daily-summary').count(),1);
+ assert.match(await page.locator('.momentum-tasks').innerText(),/0 \/ 4/);
+ await page.getByRole('button',{name:'Szint',exact:true}).click();
+ assert.equal(await page.locator('.level-page > .card').count(),2);
+ assert.equal(await page.locator('.level-page > .card').nth(0).evaluate(el=>el.classList.contains('level-development')),true);
+ assert.equal(await page.locator('.level-page > .card').nth(1).evaluate(el=>el.classList.contains('daily-mini-quests')),true);
+ assert.equal(await page.locator('.date-strip,.week-planner,#quickTaskForm,[data-action=editTask]').count(),0);
+ assert.equal(await page.locator('.daily-mini-quests details,.daily-mini-quests summary').count(),0);
+ assert.equal(await page.locator('#challengesTitle').innerText(),'Kihívások');
+ assert.equal(await page.locator('.challenge-group-daily').isVisible(),true);
+ assert.equal(await page.locator('.challenge-group-weekly').count(),0);
+ await page.evaluate(()=>{state.ui.hidden=['progress','quests'];state.ui.miniQuestsOpen=false;save();render()});
+ assert.equal(await page.locator('.level-development').isVisible(),true);
+ assert.equal(await page.locator('.challenge-group-daily').isVisible(),true);
+ await page.evaluate(()=>{
+  state.tasks=[state.tasks[0]];
+  state.weeklyChallenges=[{id:'weekly-layout-test',taskId:state.tasks[0].id,target:1,bonus:30,claimed:[]}];
+  state.ui.blocks=['wish','tasks','progress','quests','calendar'];state.ui.hidden=['wish'];
+  delete state.ui.challengeLayoutV1;
+  window.beforeLayout=JSON.stringify([state.tasks,state.history,state.ledger,state.questClaims,state.weeklyChallenges]);
+  save();tab='today';render();
+ });
+ assert.equal(await page.evaluate(()=>JSON.stringify([state.tasks,state.history,state.ledger,state.questClaims,state.weeklyChallenges])===window.beforeLayout),true);
+ assert.deepEqual(await page.evaluate(()=>state.ui.hidden),['wish']);
+ const calendar=await page.locator('.week-calendar').boundingBox(),summary=await page.locator('.daily-summary').boundingBox();
+ assert.ok(calendar.y<summary.y);
+ await clickTask(page,page.locator('[data-action=toggle]').first());
+ await page.evaluate(()=>{selectedDate=shift(day(),-7);render()});
+ assert.equal(await page.locator('.daily-summary').getAttribute('data-date'),await page.evaluate(()=>selectedDate));
+ await page.getByRole('button',{name:'Szint',exact:true}).click();
+ assert.equal(await page.locator('.level-development').getAttribute('data-date'),await page.evaluate(()=>day()));
+ assert.equal(await page.locator('.development-score strong').innerText(),'20');
+ const weekly=page.locator('.challenge-group-weekly'),daily=page.locator('.challenge-group-daily');
+ assert.ok((await weekly.boundingBox()).y<(await daily.boundingBox()).y);
+ await page.locator('[data-action=xpDetail]').click();
+ assert.match(await page.locator('#modalRoot h2').innerText(),/XP részletező/);
+ assert.equal(await daily.isVisible(),true);
+ await page.locator('#modalRoot [data-action=close]').click();
+ await page.locator('[data-action=challengeClaim]').click();
+ await page.waitForFunction(()=>state.weeklyChallenges[0].claimed.includes(weekStart(day())));
+ await page.evaluate(()=>claimChallenge('weekly-layout-test'));
+ await page.locator('[data-game-action=claimMini][data-slot=count]').click();
+ await page.waitForFunction(()=>pendingMiniClaims.size===0);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[70,70]);
+ await page.reload();
+ assert.equal(await page.locator('.daily-mini-quests').count(),0);
+ assert.equal(await page.locator('.daily-summary .development-score strong').innerText(),'70');
+ await page.getByRole('button',{name:'Szint',exact:true}).click();
+ await page.locator('#challengesTitle').click();
+ assert.equal(await daily.isVisible(),true);
+ assert.equal(await page.locator('[data-action=challengeClaim]').isDisabled(),true);
+ assert.equal(await page.locator('[data-game-action=claimMini][data-slot=count]').isDisabled(),true);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[70,70]);
+ assert.equal(await page.locator('#modalRoot').innerText(),'');
 });

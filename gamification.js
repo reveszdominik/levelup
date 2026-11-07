@@ -14,6 +14,11 @@ function normalizeGame(s){
  if(!s.ui.blocks.includes('progress'))s.ui.blocks.unshift('progress');
  if(!s.ui.gameLayoutV8&&s.ui.blocks.join(',')==='progress,tasks,quests,wish')s.ui.blocks=['progress','quests','tasks','wish'];
  s.ui.gameLayoutV8=true;
+ if(!s.ui.challengeLayoutV1){
+  s.ui.blocks=['progress','quests','calendar','tasks',...s.ui.blocks.filter(key=>!['progress','quests','calendar','tasks'].includes(key))];
+  s.ui.challengeLayoutV1=true;
+ }
+ s.ui.blocks=s.ui.blocks.filter(key=>!['quests','calendar'].includes(key));
  return s;
 }
 function taskDoneIds(s,date){
@@ -82,20 +87,33 @@ function activityStreak(s,date=day()){
  let current=days.has(date)?date:shift(date,-1),count=0;
  while(days.has(current)&&count<=days.size){count++;current=shift(current,-1)}return count;
 }
-function dailyDevelopmentHTML(visible){
- const n=Math.max(0,gameXP(state,selectedDate)),goal=state.settings.dailyXPGoal,series=activityStreak(state,selectedDate),currentLevel=gameLevel(state);
- const done=visible.filter(t=>isDone(t,selectedDate)).length;
- const message=n>=goal?'Napi cél teljesítve. Szép munka!':n===0?'Egy kis lépés is számít.':n<goal/2?'Már elindultál. Csak így tovább!':'Már közel a napi célod!';
- return `<section class="card daily-progress daily-development" aria-label="Napi fejlődés"><div class="development-top"><button class="development-level" data-action="xpDetail" aria-label="XP részletezése"><span class="development-star" aria-hidden="true">✦</span><strong>${currentLevel}. szint</strong></button><span class="development-streak" aria-label="${series} napos aktivitási sorozat"><span aria-hidden="true">♨</span> ${series} nap</span></div><div class="development-score"><div><strong>${n}</strong><span> / ${goal} XP</span></div><span class="goal-status">${n>=goal?'✓ Napi cél':'Napi fejlődés'}</span></div><div class="progress" role="progressbar" aria-label="Napi XP-cél" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(n,goal)}" aria-valuetext="${n} a ${goal} XP-ből"><div class="bar" style="width:${Math.min(100,n/goal*100)}%"></div></div><p class="development-message">${message}</p><div class="development-footer"><span class="momentum-tasks">${done} / ${visible.length} feladat kész</span><span>${wallet()} elkölthető pont</span></div></section>`;
+function streakBadgeHTML(date=day()){
+ const series=activityStreak(state,date);
+ return `<span class="development-streak" aria-label="${series} napos aktivitási sorozat"><span aria-hidden="true">⚡</span> ${series} nap</span>`;
+}
+function dailyDevelopmentHTML(visible,{compact=false,date=selectedDate}={}){
+ const n=Math.max(0,gameXP(state,date)),goal=state.settings.dailyXPGoal,currentLevel=gameLevel(state);
+ const done=visible.filter(t=>isDone(t,date)).length;
+
+ return `<section class="card daily-progress daily-development ${compact?'daily-summary':'level-development'}" data-date="${date}" aria-label="${compact?'Napi fejlődés':'Szint és napi fejlődés'}">${compact?'':`<div class="development-top"><div class="development-level"><button type="button" class="development-star" data-action="xpDetail" aria-label="XP részletezése"><span aria-hidden="true">✦</span></button><strong>${currentLevel}. szint</strong></div>${streakBadgeHTML(date)}</div>`}<div class="development-score"><div><strong>${n}</strong><span> / ${goal} XP</span></div><span class="goal-status">${n>=goal?'✓ Napi cél':'Napi fejlődés'}</span></div><div class="progress" role="progressbar" aria-label="Napi XP-cél" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.min(n,goal)}" aria-valuetext="${n} a ${goal} XP-ből"><div class="bar" style="width:${Math.min(100,n/goal*100)}%"></div></div><div class="development-footer"><span class="momentum-tasks">${done} / ${visible.length} feladat kész</span><span>${wallet()} elkölthető pont</span></div></section>`;
 }
 function miniMissionsHTML(){
  const plan=state.dailyMissions[day()],complete=plan.missions.filter(m=>m.completed).length;
- const weekly=quests().find(q=>q.key.startsWith('weekly10:'));
- return `<details class="card daily-mini-quests" ${state.ui.miniQuestsOpen?'open':''}><summary><span><small>3 APRÓ KIHÍVÁS</small><strong>Mai küldetések</strong></span><span class="mini-count">${complete}/3 kész <span aria-hidden="true">⌄</span></span></summary><div class="mini-quest-list">${plan.missions.map(m=>{
+ const weeklyQuest=quests().find(q=>q.key.startsWith('weekly10:'));
+ const weekly=weeklyQuest&&(weeklyQuest.progress>0||state.questClaims.includes(weeklyQuest.key))?weeklyQuest:null;
+ const challenges=weekChallenges();
+ const weeklyHTML=challenges||weekly?`<section class="challenge-group challenge-group-weekly" aria-labelledby="weeklyChallengesTitle"><h3 id="weeklyChallengesTitle">Heti kihívások</h3>${challenges}${weekly?`<div class="item weekly-bonus"><div class="grow"><div class="name">Aktív hét</div><div class="muted">${Math.min(weekly.progress,weekly.target)} / ${weekly.target} teljesítés · +${weekly.points} XP</div><div class="progress" role="progressbar" aria-label="Aktív hét" aria-valuemin="0" aria-valuemax="${weekly.target}" aria-valuenow="${Math.min(weekly.progress,weekly.target)}"><div class="bar" style="width:${Math.min(100,100*weekly.progress/weekly.target)}%"></div></div></div><button class="btn small" data-action="claim" data-id="${weekly.key}" ${weekly.progress<weekly.target||state.questClaims.includes(weekly.key)?'disabled':''}>${state.questClaims.includes(weekly.key)?'Átvéve':weekly.progress>=weekly.target?'Átveszem':'Folyamatban'}</button></div>`:''}</section>`:'';
+ return `<section class="card daily-mini-quests" aria-labelledby="challengesTitle"><header class="challenges-heading"><h2 id="challengesTitle">Kihívások</h2><span class="mini-count">${complete}/3 ma</span></header>${weeklyHTML}<section class="challenge-group challenge-group-daily" aria-labelledby="dailyMissionsTitle"><h3 id="dailyMissionsTitle">Mai küldetések</h3><div class="mini-quest-list">${plan.missions.map(m=>{
   const progress=m.claimed?m.target:Math.min(m.target,missionProgress(state,m,day()));
-  return `<div class="mini-quest" data-mini-slot="${m.slot}"><div class="mini-quest-heading"><strong>${esc(missionTitle(m))}</strong><span>+${m.points} XP</span></div>${m.kind==='xp'?'<p class="muted">Feladatokkal, fókuszálással vagy heti kihívással; bónusz XP nélkül.</p>':''}<div class="progress" role="progressbar" aria-label="${esc(missionTitle(m))}" aria-valuemin="0" aria-valuemax="${m.target}" aria-valuenow="${progress}"><div class="bar" style="width:${Math.min(100,progress/m.target*100)}%"></div></div><div class="mini-quest-footer"><span>${progress} / ${m.target}${m.kind==='xp'?' XP':''}</span><button class="btn small" data-game-action="claimMini" data-slot="${m.slot}" data-date="${day()}" ${!m.completed||m.claimed?'disabled':''}>${m.claimed?'✓ Átvéve':m.completed?'Bónusz átvétele':'Folyamatban'}</button></div></div>`;
- }).join('')}</div>${weekly?`<details class="weekly-extra"><summary>Heti bónusz · +${weekly.points} XP</summary><div class="mini-quest-footer"><span>${Math.min(weekly.progress,weekly.target)} / ${weekly.target} teljesítés</span><button class="btn small" data-action="claim" data-id="${weekly.key}" ${weekly.progress<weekly.target||state.questClaims.includes(weekly.key)?'disabled':''}>${state.questClaims.includes(weekly.key)?'Átvéve':'Átvétel'}</button></div></details>`:''}</details>`;
+  return `<div class="mini-quest" data-mini-slot="${m.slot}"><div class="mini-quest-body"><div class="mini-quest-heading"><strong>${esc(missionTitle(m))}</strong><span>+${m.points} XP</span></div><div class="mini-quest-progress"><div class="progress" role="progressbar" aria-label="${esc(missionTitle(m))}" aria-valuemin="0" aria-valuemax="${m.target}" aria-valuenow="${progress}"><div class="bar" style="width:${Math.min(100,progress/m.target*100)}%"></div></div><span>${progress}/${m.target}${m.kind==='xp'?' XP':''}</span></div>${m.kind==='xp'?'<small class="mini-quest-note">Bónusz XP nélkül</small>':''}</div><button class="btn small" data-game-action="claimMini" data-slot="${m.slot}" data-date="${day()}" ${!m.completed||m.claimed?'disabled':''}>${m.claimed?'✓ Átvéve':m.completed?'Átveszem':'Folyamatban'}</button></div>`;
+ }).join('')}</div></section></section>`;
 }
+
+function levelPageHTML(){
+ const today=day(),visible=state.tasks.filter(t=>!t.archived&&scheduled(t,today));
+ return `<div class="level-page">${dailyDevelopmentHTML(visible,{date:today})}${miniMissionsHTML()}</div>`;
+}
+
 function gameMetrics(s){return {level:gameLevel(s),xp:gameXP(s),daily:gameXP(s,day()),goal:s.settings.dailyXPGoal,maxLevel:s.gameFeedback.maxLevel,goalShown:!!s.gameFeedback.goalDays[day()]}}
 function animationsAllowed(){return state.settings.animationsEnabled&&!matchMedia('(prefers-reduced-motion: reduce)').matches}
 const gameAnimations=new Set();
@@ -115,7 +133,8 @@ function showGameFeedback(before,meta,flags){
  const announcer=$('#gameAnnounce');if(announcer)announcer.textContent=announcements.join(' ');
  if(meta.haptic&&state.settings.hapticsEnabled&&navigator.vibrate){try{navigator.vibrate(10)}catch{}}
  if(!animationsAllowed())return;
- if(selectedDate===day())trackAnimation($('.daily-development .bar'),[{width:Math.min(100,before.daily/before.goal*100)+'%'},{width:Math.min(100,now.daily/now.goal*100)+'%'}],{duration:450,easing:'cubic-bezier(.2,.8,.2,1)'});
+ const card=document.querySelector('.daily-development[data-date="'+day()+'"]');
+ if(card)trackAnimation(card.querySelector('.bar'),[{width:Math.min(100,before.daily/before.goal*100)+'%'},{width:Math.min(100,now.daily/now.goal*100)+'%'}],{duration:450,easing:'cubic-bezier(.2,.8,.2,1)'});
  const host=$('#xpEffects');if(!host)return;
  if(meta.points>0){
   while(host.querySelectorAll('.xp-float').length>=3)host.querySelector('.xp-float').remove();
@@ -123,7 +142,7 @@ function showGameFeedback(before,meta,flags){
   const rect=meta.rect,x=rect?Math.min(innerWidth-50,Math.max(50,rect.left+rect.width/2)):innerWidth/2,y=rect&&rect.top>=0&&rect.top<innerHeight?rect.top:110;
   pop.style.left=x+'px';pop.style.top=y+'px';host.append(pop);setTimeout(()=>pop.remove(),950);
  }
- if(flags.goalReached)trackAnimation($('.daily-development'),[{boxShadow:'0 0 0 0 #96b78600'},{boxShadow:'0 0 0 8px #96b78644'},{boxShadow:'0 0 0 0 #96b78600'}],{duration:900});
+ if(flags.goalReached)trackAnimation(card,[{boxShadow:'0 0 0 0 #96b78600'},{boxShadow:'0 0 0 8px #96b78644'},{boxShadow:'0 0 0 0 #96b78600'}],{duration:900});
  if(flags.levelUp||flags.goalReached){
   host.querySelector('.game-milestone')?.remove();const banner=document.createElement('div');banner.className='game-milestone '+(flags.levelUp?'level-up':'goal-up');
   const title=document.createElement('strong'),detail=document.createElement('span');title.textContent=flags.levelUp?`✦ ${now.level}. szint!`:'✦ Napi cél teljesítve!';
@@ -208,11 +227,6 @@ async function checkLocalDay(){
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLocalDay()});
 document.addEventListener('click',event=>{const button=event.target.closest('[data-game-action=claimMini]');if(button)claimMini(button.dataset.slot,button.dataset.date)});
-document.addEventListener('toggle',event=>{
- if(!event.target.matches('.daily-mini-quests'))return;
- const open=event.target.open;if(state.ui.miniQuestsOpen===open)return;
- const next=JSON.parse(JSON.stringify(state));next.ui.miniQuestsOpen=open;replaceState(next);
-},true);
 document.addEventListener('change',event=>{
  if(!event.target.matches('[data-game-setting]'))return;
  const key=event.target.dataset.gameSetting;if(!['animationsEnabled','hapticsEnabled'].includes(key))return;

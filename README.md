@@ -91,3 +91,39 @@ Interaktív, játékosított élmény (8.0)
 - A `levelup-v1` kulcs és a 7-es mentési verzió változatlan; az új opcionális mezők: `dailyMissions`, `gameFeedback`, `settings.animationsEnabled`, `settings.hapticsEnabled`, `ui.miniQuestsOpen`, `ui.gameLayoutV8`, valamint a küldetéses előzmények `missionKey` azonosítója. A hiányzó mezők migrációval kapnak alapértéket; a régi feladatok, előzmények, ledger, fókusz, mentések és visszaállítási pontok megmaradnak. A szintszámítás továbbra is `floor(XP / 200) + 1`.
 - A helyi `gamification.js` a többi szkript előtt töltődik be, és része az új PWA-cache-nek. Az előnézet-generátor ezt is átveszi, külön localStorage- és visszaállítási kulccsal, az éles adatok automatikus átmásolása nélkül.
 - A regressziós ellenőrzések mellett a `tests/gamification.cjs` vizsgálja a régi mentést, a megvalósítható és módosuló küldetéseket, az ismételt és többablakos XP-jóváírást, a visszavonást, a mérföldkövek egyszeri jelzését, a mozgásbeállításokat, a sikertelen mentést és a helyi éjféli napváltást. A fizikai iPhone haptikáját ezek a Chromium-alapú tesztek nem szimulálják.
+
+Egyszerűbb kezdőlap
+
+- A fejlécben csak a LevelUp márkanév marad; a mottó és a napi kártya motivációs mondata kikerült. A napi és a szokásonkénti sorozat ikonja villám.
+- A naptár nyilai helyett a napokat oldalra húzva lehet előző vagy következő hétre lapozni. A natív görgetés a hetek elejére igazodik, újra és újra mindkét irányban folytatható. A napokra továbbra is lehet koppintani; billentyűzettel a bal/jobb nyíl napot vált, a Ma gomb visszahoz a mai napra. A heti tervező ugyanazt a naptársávot használja. A lapozás nem módosít adatot vagy XP-t.
+- A Mai feladatok címe mellől kikerült a kereső és a kiemelő csillag. A korábban mentett kiemelések adatai megmaradnak. Az Összes / Hátralévő / Kész szűrők továbbra is használhatók.
+- A gyors teendő + gombja mellett azonos magasságú és megjelenésű Részletes teendő gomb található. Átveszi a gyorsmező nevét, egyszeri teendővel és a kiválasztott nappal nyitja meg a szerkesztőt; a szokások szerkesztése és létrehozása a többi nézetben változatlan.
+- A Mai küldetések tömörebb sorokban mutatja a címet, bónuszt, haladást és az egyszeri átvételt. A Korábbról maradt teendők hasonló, alapból összecsukott részbe kerültek; a fejléc mutatja a darabszámot. Megnyitása az opcionális `ui.overdueOpen` mezőbe mentődik, így áthozás és újratöltés után is megmarad. Az áthozás és a részfeladatok jelölése változatlanul működik.
+- A mentési kulcs, a mentési verzió, az XP-elszámolás és a küldetéscélok változatlanok. A PWA-cache új azonosítót kapott, a GitHub Pages-előnézet továbbra is külön adatokat használ.
+
+Kihívások és kezdőlapi sorrend
+
+- Az egyszeri elrendezésfrissítés a főoldali blokkokat Szint és napi fejlődés → Kihívások → Naptár → Feladatok sorrendbe teszi, a többi blokkot ezek után hagyva. A mentés opcionális `ui.challengeLayoutV1` jelzője biztosítja, hogy ez ne írja felül minden betöltéskor a későbbi saját sorrendet; a blokkok továbbra is testreszabhatók. A naptár külön `calendar` blokk, a rejtési beállítások és minden teljesítés, XP, cél és jutalom változatlanok.
+- A Kihívások feliratú lenyíló kártyán belül előbb a Heti kihívások, elválasztó után a Mai küldetések szerepelnek. A heti rész akkor látható, ha van aktív beállított heti kihívás vagy már megkezdett/átvett heti bónusz. Az eddigi külön heti kihívásblokk és a heti bónusz további lenyílója megszűnik, ugyanazok az átvételi és törlési műveletek az egyesített kártyában érhetők el.
+- A mai küldetések mindig a helyi mai naphoz tartoznak; a Kihívások kártya a naptár lapozása közben is a helyén marad. A fejléc számlálója a három mai küldetés haladását jelzi. A napi és heti bónuszok elszámolása, egyszeri átvétele és mentett azonosítói nem változtak.
+
+Kihívások a szintkártyában
+
+- A heti és napi kihívások a szint/napi fejlődés kártya aljába kerültek. A Kihívások sáv natív lenyíló: csak ez nyitja/csukja a listát, és maga a szintkártya növekszik meg. A heti/napi elkülönítés, az egyszeri bónuszátvétel és a `ui.miniQuestsOpen` megnyitási beállítás változatlan.
+- A szint melletti ikon önálló, legalább 44×44 px-es gombként nyitja az XP-részletezőt. Nem nyitja ki a kihíváslistát; a Kihívások sáv és a bónuszgombok nem nyitnak XP-ablakot.
+- A külön `quests` kezdőlapi blokksorrend-elem megszűnik. A korábbi `ui.hidden` elrejtési beállítása továbbra is érvényes; a Beállításokban a Kihívások a szintkártyában jelölővel külön kapcsolható a sáv. A szintkártya és a többi blokk sorrendje továbbra is módosítható. Az adatok és a mentési verzió nem változnak.
+
+Szint lap és kompakt főoldal
+
+- A korábbi Tervező navigációs pont neve Szint, csillag ikonnal. A belső `planner` nézetazonosító megmaradt; a korábbi heti tervező tartalma, naptára és hozzáadógombja itt nem jelenik meg. A lap csak két külön kártyát tartalmaz: a teljes szint/napi fejlődés kártyát és a mindig látható Kihívások kártyát. A kihívások nem csukhatók össze; felül a meglévő heti kihívások, alattuk elkülönítve a mai küldetések láthatók. Az XP-ikon továbbra is a részletező ablakot nyitja.
+- A főoldal tetején ismét a húzható naptár található. A napi összefoglaló kizárólag az adott nap XP-jét/célját, a haladássávot, a teljesítésszámlálót és az elkölthető pontokat mutatja. A szintfejléc, az XP-ikon, a streak és a kihívások a Szint lapra kerültek. A szokások, teendők, részfeladatok, áthozás és átütemezés továbbra is a főoldalról használhatók.
+- A Szint lap mindig a helyi mai nap adatait mutatja, a főoldal naptári kiválasztásától függetlenül. Az XP-sáv animációja a megjelenített kártya napjához igazodik, így a mai bónusz ott is visszajelzést ad, ha előtte a főoldalon másik napot néztél.
+- A naptár már nem külön rendezhető/elrejthető blokk, hanem állandóan a főoldal tetején marad. A `calendar` és `quests` elemek kikerülnek a kezdőlapi blokksorrendből. A korábbi megnyitási és elrejtési adatmezők megmaradnak a mentésben, de nem rejtik el és nem csukják össze a Szint lap két kártyáját. A többi kezdőlapi blokk beállítása és minden felhasználói adat, cél, teljesítés, XP, bónuszazonosító változatlan.
+
+Kompakt főoldali fejléc
+
+- A Mai feladatok cím, a gyors teendőbeviteli mező, a gyors +, a Részletes teendő gomb és a folyamatosan látható szűrősáv kikerült a főoldal tartalmából. A jobb felső fejlécben az új sorrend: streak jelvény → szűrőikon → +.
+- A 44×44 px-es, lekerekített + a meglévő részletes szerkesztőt nyitja meg, alapból egyszeri teendővel és a főoldalon kiválasztott nappal. Ugyanitt szokás is választható; a pontérték, dátum, részfeladat, kategória és ismétlődés továbbra is szerkeszthető. Mentéskor nem jár XP. A részletes szerkesztő eddigi alapértéke megmarad, a külön 10 XP-s gyorsrögzítés megszűnik.
+- A szűrőikon lenyílója az Összes / Hátralévő / Kész lehetőségeket tartalmazza. Ugyanazt az opcionális `ui.missionFilter` mezőt használja, a meglévő szűrés megmarad újratöltés után. Választáskor a menü bezárul, a fókusz visszakerül az ikonra. Külső érintésre és Escape-re is bezárul; az aktív szűrést kis pont jelzi. A napi összesítés és az XP nem változik szűréskor.
+- A fejlécben és a Szint lapon ugyanaz a helyi mai aktivitási sorozat jelenik meg, függetlenül a főoldalon kiválasztott naptól. A jelvény és a két ikon azonos, legalább 44 px magas. A fejléc eszközei csak a főoldalon látszanak; a Szint lap két külön kártyája megmarad.
+- Nincs új mentési mező vagy szolgáltatás. A korábbi adatok és elrendezési beállítások megmaradnak; az előnézeti teszt a korábbi, gyorsrögzítős tesztoldalak ellenőrzését is támogatja.

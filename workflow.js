@@ -1,8 +1,49 @@
 /* Planning and recovery UI. All storage keys derive from the current app/preview KEY. */
 let missionSearch='',missionSearchOpen=false,deleteUndo=null,undoTimeout=null;
-function missionControls(){
- return `${missionSearchOpen?`<div class="mission-search"><label class="sr-only" for="missionSearch">Keresés a küldetések között</label><input id="missionSearch" type="search" placeholder="Keresés név szerint…" value="${esc(missionSearch)}" autocomplete="off"><button type="button" class="text-action" data-workflow-action="clearSearch" aria-label="Keresés törlése">×</button></div>`:''}<div class="mission-filters" role="group" aria-label="Küldetések szűrése">${[['all','Összes'],['pending','Hátralévő'],['done','Kész']].map(([value,label])=>`<button data-workflow-action="filter" data-value="${value}" aria-pressed="${state.ui.missionFilter===value}">${label}</button>`).join('')}</div>`;
+// Three native scroll-snap pages keep swiping available in either direction.
+// Recenter only after the gesture settles; taps still select individual days.
+function initializeDateStrip(){
+ const rail=document.querySelector('.date-strip');if(!rail)return;
+ const date=selectedDate,view=tab;let timer,touching=false;
+ rail.scrollLeft=rail.clientWidth;
+ const settle=()=>{
+  if(touching||!rail.isConnected||selectedDate!==date||tab!==view)return;
+  const width=rail.clientWidth;if(!width)return;
+  const page=Math.round(rail.scrollLeft/width);
+  if(page===1||Math.abs(rail.scrollLeft-page*width)>2)return;
+  selectedDate=shift(date,(page-1)*7);render();
+ };
+ const schedule=()=>{clearTimeout(timer);timer=setTimeout(settle,180)};
+ rail.addEventListener('scroll',schedule,{passive:true});
+ rail.addEventListener('scrollend',settle);
+ rail.addEventListener('touchstart',()=>{touching=true;clearTimeout(timer)},{passive:true});
+ const endTouch=()=>{touching=false;schedule()};
+ rail.addEventListener('touchend',endTouch,{passive:true});
+ rail.addEventListener('touchcancel',endTouch,{passive:true});
+ rail.addEventListener('keydown',event=>{
+  if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+  event.preventDefault();selectedDate=shift(selectedDate,event.key==='ArrowLeft'?-1:1);render();
+  document.querySelector('.date-day.active')?.focus({preventScroll:true});
+ });
 }
+window.addEventListener('resize',()=>{const rail=document.querySelector('.date-strip');if(rail)rail.scrollLeft=rail.clientWidth});
+document.addEventListener('toggle',event=>{
+ if(!event.target.matches('.overdue-card'))return;
+ const open=event.target.open;if((state.ui.overdueOpen===true)===open)return;
+ const next=JSON.parse(JSON.stringify(state));next.ui.overdueOpen=open;replaceState(next);
+},true);
+function missionControls(){
+ const active=state.ui.missionFilter!=='all';
+ return `<details class="home-filter-menu"><summary class="icon-button home-filter-toggle ${active?'is-filtered':''}" data-filter-toggle aria-label="Feladatok szűrése" aria-controls="homeFilterOptions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg>${active?'<span class="filter-dot" aria-hidden="true"></span>':''}<span class="sr-only">Aktív: ${({all:'Összes',pending:'Hátralévő',done:'Kész'})[state.ui.missionFilter]}</span></summary><div class="home-filter-options" id="homeFilterOptions" role="group" aria-label="Feladatok szűrése">${[['all','Összes'],['pending','Hátralévő'],['done','Kész']].map(([value,label])=>`<button type="button" data-workflow-action="filter" data-value="${value}" aria-pressed="${state.ui.missionFilter===value}">${label}<span aria-hidden="true">${state.ui.missionFilter===value?'✓':''}</span></button>`).join('')}</div></details>`;
+}
+document.addEventListener('click',event=>{
+ const menu=document.querySelector('.home-filter-menu');
+ if(menu?.open&&!event.target.closest('.home-filter-menu'))menu.open=false;
+});
+document.addEventListener('keydown',event=>{
+ const menu=document.querySelector('.home-filter-menu');
+ if(event.key==='Escape'&&menu?.open){event.preventDefault();menu.open=false;menu.querySelector('summary').focus()}
+});
 function missionResults(items){
  const normalize=text=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('hu-HU');
  const query=normalize(missionSearch.trim()),filter=state.ui.missionFilter;
@@ -100,7 +141,7 @@ document.addEventListener('click',event=>{
  const action=button.dataset.workflowAction,task=state.tasks.find(t=>t.id===button.dataset.id);
  if(action==='filter'){
   const value=button.dataset.value;if(!['all','pending','done'].includes(value))return;
-  const next=JSON.parse(JSON.stringify(state));next.ui.missionFilter=value;if(replaceState(next))render();
+  const next=JSON.parse(JSON.stringify(state));next.ui.missionFilter=value;if(replaceState(next)){render();document.querySelector('[data-filter-toggle]')?.focus({preventScroll:true})}
  }else if(action==='search'){
   missionSearchOpen=!missionSearchOpen;if(!missionSearchOpen)missionSearch='';render();$('#missionSearch')?.focus();
  }else if(action==='clearSearch'){
