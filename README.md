@@ -100,3 +100,9 @@ Egyszerűbb kezdőlap
 - A gyors teendő + gombja mellett azonos magasságú és megjelenésű Részletes teendő gomb található. Átveszi a gyorsmező nevét, egyszeri teendővel és a kiválasztott nappal nyitja meg a szerkesztőt; a szokások szerkesztése és létrehozása a többi nézetben változatlan.
 - A Mai küldetések tömörebb sorokban mutatja a címet, bónuszt, haladást és az egyszeri átvételt. A Korábbról maradt teendők hasonló, alapból összecsukott részbe kerültek; a fejléc mutatja a darabszámot. Megnyitása az opcionális `ui.overdueOpen` mezőbe mentődik, így áthozás és újratöltés után is megmarad. Az áthozás és a részfeladatok jelölése változatlanul működik.
 - A mentési kulcs, a mentési verzió, az XP-elszámolás és a küldetéscélok változatlanok. A PWA-cache új azonosítót kapott, a GitHub Pages-előnézet továbbra is külön adatokat használ.
+
+Kihívások és kezdőlapi sorrend
+
+- Az egyszeri elrendezésfrissítés a főoldali blokkokat Szint és napi fejlődés → Kihívások → Naptár → Feladatok sorrendbe teszi, a többi blokkot ezek után hagyva. A mentés opcionális `ui.challengeLayoutV1` jelzője biztosítja, hogy ez ne írja felül minden betöltéskor a későbbi saját sorrendet; a blokkok továbbra is testreszabhatók. A naptár külön `calendar` blokk, a rejtési beállítások és minden teljesítés, XP, cél és jutalom változatlanok.
+- A Kihívások feliratú lenyíló kártyán belül előbb a Heti kihívások, elválasztó után a Mai küldetések szerepelnek. A heti rész akkor látható, ha van aktív beállított heti kihívás vagy már megkezdett/átvett heti bónusz. Az eddigi külön heti kihívásblokk és a heti bónusz további lenyílója megszűnik, ugyanazok az átvételi és törlési műveletek az egyesített kártyában érhetők el.
+- A mai küldetések mindig a helyi mai naphoz tartoznak; a Kihívások kártya a naptár lapozása közben is a helyén marad. A fejléc számlálója a három mai küldetés haladását jelzi. A napi és heti bónuszok elszámolása, egyszeri átvétele és mentett azonosítói nem változtak.
