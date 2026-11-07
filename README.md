@@ -106,3 +106,9 @@ Kihívások és kezdőlapi sorrend
 - Az egyszeri elrendezésfrissítés a főoldali blokkokat Szint és napi fejlődés → Kihívások → Naptár → Feladatok sorrendbe teszi, a többi blokkot ezek után hagyva. A mentés opcionális `ui.challengeLayoutV1` jelzője biztosítja, hogy ez ne írja felül minden betöltéskor a későbbi saját sorrendet; a blokkok továbbra is testreszabhatók. A naptár külön `calendar` blokk, a rejtési beállítások és minden teljesítés, XP, cél és jutalom változatlanok.
 - A Kihívások feliratú lenyíló kártyán belül előbb a Heti kihívások, elválasztó után a Mai küldetések szerepelnek. A heti rész akkor látható, ha van aktív beállított heti kihívás vagy már megkezdett/átvett heti bónusz. Az eddigi külön heti kihívásblokk és a heti bónusz további lenyílója megszűnik, ugyanazok az átvételi és törlési műveletek az egyesített kártyában érhetők el.
 - A mai küldetések mindig a helyi mai naphoz tartoznak; a Kihívások kártya a naptár lapozása közben is a helyén marad. A fejléc számlálója a három mai küldetés haladását jelzi. A napi és heti bónuszok elszámolása, egyszeri átvétele és mentett azonosítói nem változtak.
+
+Kihívások a szintkártyában
+
+- A heti és napi kihívások a szint/napi fejlődés kártya aljába kerültek. A Kihívások sáv natív lenyíló: csak ez nyitja/csukja a listát, és maga a szintkártya növekszik meg. A heti/napi elkülönítés, az egyszeri bónuszátvétel és a `ui.miniQuestsOpen` megnyitási beállítás változatlan.
+- A szint melletti ikon önálló, legalább 44×44 px-es gombként nyitja az XP-részletezőt. Nem nyitja ki a kihíváslistát; a Kihívások sáv és a bónuszgombok nem nyitnak XP-ablakot.
+- A külön `quests` kezdőlapi blokksorrend-elem megszűnik. A korábbi `ui.hidden` elrejtési beállítása továbbra is érvényes; a Beállításokban a Kihívások a szintkártyában jelölővel külön kapcsolható a sáv. A szintkártya és a többi blokk sorrendje továbbra is módosítható. Az adatok és a mentési verzió nem változnak.

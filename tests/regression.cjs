@@ -604,6 +604,23 @@ test('compact missions and overdue disclosure retain actions while quick and det
 
 test('grouped challenges migrate the home order and keep weekly and daily rewards claimable once',async t=>{
  const page=await open(t);
+ const card=page.locator('.daily-development'),disclosure=card.locator('.daily-mini-quests');
+ assert.equal(await disclosure.count(),1);
+ assert.equal(await page.locator('[data-home-block=quests]').count(),0);
+ assert.equal(await disclosure.evaluate(el=>el.open),false);
+ const closedHeight=(await card.boundingBox()).height;
+ await card.locator('[data-action=xpDetail]').click();
+ assert.match(await page.locator('#modalRoot h2').innerText(),/XP részletező/);
+ assert.equal(await disclosure.evaluate(el=>el.open),false);
+ await page.locator('#modalRoot [data-action=close]').click();
+ await disclosure.locator('summary').press('Enter');
+ assert.ok((await card.boundingBox()).height>closedHeight+40);
+ assert.equal(await page.locator('#modalRoot').innerText(),'');
+ await card.locator('[data-action=xpDetail]').click();
+ assert.equal(await disclosure.evaluate(el=>el.open),true);
+ await page.locator('#modalRoot [data-action=close]').click();
+ await disclosure.locator('summary').click();
+ await page.waitForFunction(()=>state.ui.miniQuestsOpen===false);
  assert.equal(await page.locator('.daily-mini-quests > summary > strong').innerText(),'Kihívások');
  assert.equal(await page.locator('.challenge-group-weekly').count(),0);
  await page.evaluate(()=>{
@@ -614,7 +631,7 @@ test('grouped challenges migrate the home order and keep weekly and daily reward
   window.beforeLayout=JSON.stringify([state.tasks,state.history,state.ledger,state.questClaims,state.weeklyChallenges]);
   save();render();
  });
- assert.deepEqual(await page.locator('[data-home-block]').evaluateAll(items=>items.slice(0,4).map(el=>el.dataset.homeBlock)),['progress','quests','calendar','tasks']);
+ assert.deepEqual(await page.locator('[data-home-block]').evaluateAll(items=>items.slice(0,3).map(el=>el.dataset.homeBlock)),['progress','calendar','tasks']);
  assert.equal(await page.evaluate(()=>JSON.stringify([state.tasks,state.history,state.ledger,state.questClaims,state.weeklyChallenges])===window.beforeLayout),true);
  assert.deepEqual(await page.evaluate(()=>state.ui.hidden),['wish']);
  await page.locator('.daily-mini-quests > summary').click();
@@ -632,5 +649,16 @@ test('grouped challenges migrate the home order and keep weekly and daily reward
  assert.equal(await page.locator('.daily-mini-quests').evaluate(el=>el.open),true);
  assert.equal(await page.locator('[data-action=challengeClaim]').isDisabled(),true);
  assert.equal(await page.locator('[data-game-action=claimMini][data-slot=count]').isDisabled(),true);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[70,70]);
+ assert.equal(await page.locator('#modalRoot').innerText(),'');
+ await page.evaluate(()=>{tab='settings';render()});
+ await page.locator('[data-block-toggle=quests]').uncheck();
+ await page.evaluate(()=>{tab='today';render()});
+ assert.equal(await page.locator('.daily-mini-quests').count(),0);
+ assert.equal(await card.isVisible(),true);
+ await page.evaluate(()=>{tab='settings';render()});
+ await page.locator('[data-block-toggle=quests]').check();
+ await page.evaluate(()=>{tab='today';render()});
+ assert.equal(await disclosure.count(),1);
  assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[70,70]);
 });
