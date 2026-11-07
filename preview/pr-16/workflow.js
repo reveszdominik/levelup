@@ -52,6 +52,15 @@ document.addEventListener('keydown',event=>{
  const menu=document.querySelector('.home-filter-menu');
  if(event.key==='Escape'&&menu?.open){event.preventDefault();menu.open=false;menu.querySelector('summary').focus()}
 });
+function addRewardCategory(name){
+ const category=String(name||'').trim();
+ if(!category||category.length>32||state.rewardCategories.includes(category))return toast('Már létező vagy üres jutalomkategória');
+ const next=JSON.parse(JSON.stringify(state));next.rewardCategories.push(category);if(replaceState(next))render();
+}
+function deleteRewardCategory(category){
+ if(rewardCategoryInUse(category))return toast('Ez a kategória jutalomhoz tartozik.');
+ const next=JSON.parse(JSON.stringify(state));next.rewardCategories=next.rewardCategories.filter(value=>value!==category);if(replaceState(next))render();
+}
 function missionResults(items){
  const normalize=text=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('hu-HU');
  const query=normalize(missionSearch.trim()),filter=state.ui.missionFilter;
@@ -150,6 +159,8 @@ document.addEventListener('click',event=>{
  if(action==='filter'){
   const value=button.dataset.value;if(!['all','pending','done'].includes(value))return;
   const next=JSON.parse(JSON.stringify(state));next.ui.missionFilter=value;if(replaceState(next)){render();document.querySelector('[data-filter-toggle]')?.focus({preventScroll:true})}
+ }else if(action==='deleteRewardCategory'){
+  deleteRewardCategory(button.dataset.category);
  }else if(action==='rewardFilter'){
   setRewardFilter(button.dataset.value);
  }else if(action==='clearRewardFilters'){
@@ -167,6 +178,7 @@ document.addEventListener('click',event=>{
  else if(action==='undoDelete')undoDelete();
 });
 document.addEventListener('submit',event=>{
+ if(event.target.id==='rewardCategoryForm'){event.preventDefault();addRewardCategory(event.target.elements.category.value)}
  if(event.target.id==='rescheduleForm'){event.preventDefault();rescheduleTodos([event.target.dataset.task],event.target.elements.date.value)}
  if(event.target.id==='pausePlanForm'){event.preventDefault();applyPausePlan(event.target,event.submitter?.value||'add')}
 });
