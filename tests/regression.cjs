@@ -49,6 +49,13 @@ async function importFile(page, value) {
 
 async function clickTask(page,button){await button.click();await page.waitForFunction(()=>pendingTaskAwards.size===0)}
 
+async function addTodo(page,name,points=10){
+ await page.locator('.home-add').click();
+ await page.locator('#taskForm [name=name]').fill(name);
+ await page.locator('#taskForm [name=points]').fill(String(points));
+ await page.locator('#taskForm button[type=submit]').click();
+}
+
 test('unreadable saves survive boot, reload and raw export byte for byte', async t => {
   for (const raw of ['broken-json', 'null', '{}', '{"tasks":[null],"rewards":[],"ledger":[],"history":[]}']) {
     const page = await open(t, raw);
@@ -183,15 +190,17 @@ test('home preferences, reward shortcut and more menu preserve existing data', a
   assert.equal(await page.locator('[data-home-block=progress]').isVisible(), false);
 });
 
-test('quick entry creates one dated todo without awarding XP and supports later editing', async t => {
+test('header add opens the full editor for dated todos and habits without awarding XP', async t => {
   const page = await open(t);
   const before = await page.evaluate(() => state.tasks.length);
-  await page.locator('#quickTaskName').fill('  Bevásárlás  ');
-  await page.locator('#quickTaskName').press('Enter');
+  await page.locator('.home-add').click();
+  assert.equal(await page.locator('#taskForm [name=points]').inputValue(),'20');
+  await page.locator('#taskForm [name=name]').fill('  Bevásárlás  ');
+  await page.locator('#taskForm button[type=submit]').click();
   assert.deepEqual(await page.evaluate(() => {
     const task = state.tasks.at(-1);
     return [state.tasks.length, task.name, task.kind, task.points, task.dueDate===day(), xp(), wallet()];
-  }), [before+1, 'Bevásárlás', 'todo', 10, true, 0, 0]);
+  }), [before+1, 'Bevásárlás', 'todo', 20, true, 0, 0]);
   const taskId = await page.evaluate(() => state.tasks.at(-1).id);
   await page.locator(`[data-action=editTask][data-id="${taskId}"]`).click();
   await page.locator('#taskForm [name=points]').fill('25');
@@ -201,11 +210,16 @@ test('quick entry creates one dated todo without awarding XP and supports later 
     const task = state.tasks.find(t=>t.id===id); return [task.name, task.points, task.kind];
   }, taskId), ['Bevásárlás', 25, 'todo']);
   await page.evaluate(() => { selectedDate=shift(day(),1);render(); });
-  await page.locator('#quickTaskName').fill('Holnapi teendő');
-  await page.locator('#quickTaskName').press('Enter');
+  await addTodo(page,'Holnapi teendő');
   const lastId = await page.evaluate(() => state.tasks.at(-1).id);
   assert.equal(await page.locator(`[data-action=toggle][data-id="${lastId}"]`).isDisabled(), true);
   assert.equal(await page.evaluate(() => state.tasks.at(-1).dueDate===shift(day(),1)), true);
+  await page.evaluate(()=>{selectedDate=day();render()});
+  await page.locator('.home-add').click();
+  await page.locator('#taskForm [name=name]').fill('Új szokás');
+  await page.locator('#taskForm [name=kind]').selectOption('habit');
+  await page.locator('#taskForm button[type=submit]').click();
+  assert.deepEqual(await page.evaluate(()=>[state.tasks.at(-1).kind,state.tasks.at(-1).frequency,xp(),wallet()]),['habit','daily',0,0]);
 });
 
 test('daily highlight is date-specific, persistent, and gives no extra XP', async t => {
@@ -419,23 +433,46 @@ test('storage failures do not partially reset XP or award a focus block',async t
   assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions.length]),[35,35,1]);
 });
 
-test('compact home has no greeting or search button and status filters do not change daily totals',async t=>{
+test('header filter dropdown preserves status filtering, daily totals and current streak',async t=>{
  const page=await open(t);
  assert.equal(await page.locator('.head').isVisible(),false);
- assert.equal(await page.locator('.home-intro').count(),0);
+ assert.equal(await page.locator('.home-intro,.mission-heading,#quickTaskForm,.mission-filters').count(),0);
  assert.ok((await page.locator('.daily-development').boundingBox()).height<=220);
  const taskId=await page.evaluate(()=>state.tasks[0].id);
  await clickTask(page,page.locator(`[data-action=toggle][data-id="${taskId}"]`));
- await page.locator('[data-workflow-action=filter][data-value=done]').click();
+ const badge=await page.locator('.development-streak').innerText();
+ await page.evaluate(()=>{selectedDate=shift(day(),-7);render()});
+ assert.equal(await page.locator('.development-streak').innerText(),badge);
+ await page.locator('[data-action=dateToday]').click();
+ const choose=async value=>{
+  await page.locator('[data-filter-toggle]').click();
+  await page.locator(`[data-workflow-action=filter][data-value=${value}]`).click();
+  assert.equal(await page.locator('.home-filter-menu').evaluate(el=>el.open),false);
+ };
+ await choose('done');
  assert.equal(await page.locator('#missionResults .task-row').count(),1);
- await page.locator('[data-workflow-action=filter][data-value=pending]').click();
+ await choose('pending');
  assert.equal(await page.locator('#missionResults .task-row').count(),3);
  assert.match(await page.locator('.momentum-tasks').innerText(),/1 \/ 4/);
- assert.equal(await page.locator('[data-workflow-action=search]').count(),0);
- await page.locator('[data-workflow-action=filter][data-value=all]').click();
- assert.equal(await page.locator('#missionResults .task-row').count(),4);
  await page.reload();
- assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.ui.missionFilter]),[20,20,'all']);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.ui.missionFilter]),[20,20,'pending']);
+ assert.equal(await page.locator('.filter-dot').count(),1);
+ assert.equal(await page.locator('#missionResults .task-row').count(),3);
+ await page.locator('[data-filter-toggle]').press('Enter');
+ assert.equal(await page.locator('.home-filter-menu').evaluate(el=>el.open),true);
+ await page.keyboard.press('Escape');
+ assert.equal(await page.locator('.home-filter-menu').evaluate(el=>el.open),false);
+ assert.equal(await page.locator('[data-filter-toggle]').evaluate(el=>el===document.activeElement),true);
+ await page.locator('[data-filter-toggle]').click();
+ await page.locator('.brand-name').click();
+ assert.equal(await page.locator('.home-filter-menu').evaluate(el=>el.open),false);
+ await choose('all');
+ assert.equal(await page.locator('.filter-dot').count(),0);
+ assert.equal(await page.locator('#missionResults .task-row').count(),4);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[20,20]);
+ await page.getByRole('button',{name:'Szint',exact:true}).click();
+ assert.equal(await page.locator('.development-streak').innerText(),badge);
+ assert.equal(await page.locator('#homeActions').isVisible(),false);
 });
 
 test('rescheduling keeps partial steps and completed todo dates cannot be rewritten',async t=>{
@@ -571,25 +608,20 @@ test('native calendar swipes cross weeks and years without changing XP, and supp
  assert.equal(await page.locator('.level-page > .card').count(),2);
 });
 
-test('compact missions and overdue disclosure retain actions while quick and detailed todo creation stay consistent',async t=>{
+test('header actions align with the streak and overdue tasks keep their steps when carried forward',async t=>{
  const page=await open(t);
  assert.equal(await page.locator('.brand-note,.development-message').count(),0);
  await page.locator('[data-tab=planner]').click();
  assert.match(await page.locator('.development-streak').innerText(),/⚡/);
  assert.ok((await page.locator('.challenge-group-daily .mini-quest-list').boundingBox()).height<240);
  await page.locator('[data-tab=today]').click();
- const buttons=page.locator('#quickTaskForm button');
- const bounds=await buttons.evaluateAll(items=>items.map(el=>({height:el.getBoundingClientRect().height,top:el.getBoundingClientRect().top})));
- assert.equal(bounds[0].height,44);assert.deepEqual(bounds[0],bounds[1]);
- await page.locator('#quickTaskName').fill('Részletes mai teendő');
- await page.locator('.detailed-add-button').click();
- assert.equal(await page.locator('#taskForm [name=kind]').inputValue(),'todo');
- assert.equal(await page.locator('#taskForm [name=name]').inputValue(),'Részletes mai teendő');
- await page.locator('#taskForm button[type=submit]').click();
+ const bounds=await page.locator('.home-add,.home-filter-toggle,#homeActions .development-streak').evaluateAll(items=>items.map(el=>({height:el.getBoundingClientRect().height,top:el.getBoundingClientRect().top})));
+ assert.equal(bounds.length,3);assert.equal(bounds[0].height,44);
+ assert.deepEqual(bounds[0],bounds[1]);assert.deepEqual(bounds[0],bounds[2]);
+ assert.equal(await page.locator('.home-add').evaluate(el=>el.getBoundingClientRect().width),44);
+ await addTodo(page,'Mai teendő');
  assert.equal(await page.evaluate(()=>state.tasks.at(-1).dueDate===day()),true);
  assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[0,0]);
- await page.locator('#quickTaskName').fill('Gyors mai teendő');await page.locator('.quick-add-button').click();
- assert.equal(await page.evaluate(()=>state.tasks.at(-1).kind),'todo');
  const taskId=await page.evaluate(()=>{const task=state.tasks.find(t=>t.kind==='todo');task.created=shift(day(),-2);task.dueDate=task.created;state.subtaskChecks[task.id+':'+task.created]=[0];save();render();return task.id});
  const overdue=page.locator('.overdue-card');
  assert.equal(await overdue.evaluate(el=>el.open),false);

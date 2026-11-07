@@ -35,7 +35,11 @@ test('Pages preview has isolated data, no worker or push access, and leaves prod
  assert.equal(await page.evaluate(()=>KEY),'levelup-preview-'+slug+'-v1');
  assert.equal(await page.locator('link[rel=manifest]').count(),0);
  assert.equal(await page.getByRole('complementary',{name:'Tesztverzió'}).isVisible(),true);
- await page.locator('#quickTaskName').fill('Csak teszt');await page.locator('#quickTaskName').press('Enter');
+ if(await page.locator('#quickTaskName').count()){
+  await page.locator('#quickTaskName').fill('Csak teszt');await page.locator('#quickTaskName').press('Enter');
+ }else{
+  await page.locator('.home-add').click();await page.locator('#taskForm [name=name]').fill('Csak teszt');await page.locator('#taskForm button[type=submit]').click();
+ }
  await page.locator('[data-action=toggle]').first().click();await page.waitForFunction(()=>typeof pendingTaskAwards==='undefined'||pendingTaskAwards.size===0);
  await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-tab=settings]').click();
  for(const action of ['pushDisable','pushEnable','pushTest','notifyPermission','saveReminder'])await page.locator(`[data-action=${action}]`).click();

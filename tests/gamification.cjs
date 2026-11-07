@@ -49,6 +49,13 @@ async function importFile(page, value) {
 
 async function clickTask(page,button){await button.click();await page.waitForFunction(()=>pendingTaskAwards.size===0)}
 
+async function addTodo(page,name,points=10){
+ await page.locator('.home-add').click();
+ await page.locator('#taskForm [name=name]').fill(name);
+ await page.locator('#taskForm [name=points]').fill(String(points));
+ await page.locator('#taskForm button[type=submit]').click();
+}
+
 async function oneHabit(page,points=20){
  await page.evaluate(points=>{state=migrate(seed());const task=state.tasks[0];task.points=points;state.tasks=[task];save();render()},points);
 }
@@ -80,7 +87,7 @@ test('mini missions use reachable tasks and adapt when a category becomes unavai
  await page.evaluate(()=>{state.tasks.forEach(t=>{t.archived=true});save();render()});
  assert.deepEqual(await page.evaluate(()=>state.dailyMissions[day()].missions.map(m=>m.kind)),['create','xp','focus']);
  assert.equal(await page.evaluate(()=>state.dailyMissions[day()].missions.every(m=>m.target>0)),true);
- await page.locator('#quickTaskName').fill('Elérhető mai teendő');await page.locator('#quickTaskName').press('Enter');
+ await addTodo(page,'Elérhető mai teendő');
  assert.equal(await page.evaluate(()=>state.dailyMissions[day()].missions[0].completed),true);
 });
 
@@ -120,7 +127,7 @@ test('mission bonuses do not advance the XP mission and undo revokes unclaimed e
  await page.evaluate(()=>claimMini('count'));
  assert.equal(await page.evaluate(()=>xp()),0);
  await page.evaluate(()=>{state.tasks=[];state.dailyMissions={};save();render()});
- await page.locator('#quickTaskName').fill('Új feladat');await page.locator('#quickTaskName').press('Enter');
+ await addTodo(page,'Új feladat');
  await page.evaluate(()=>claimMini('count'));
  assert.equal(await page.evaluate(()=>xp()),20);
  assert.equal(await page.evaluate(()=>missionProgress(state,state.dailyMissions[day()].missions[1],day())),0);

@@ -33,8 +33,17 @@ document.addEventListener('toggle',event=>{
  const next=JSON.parse(JSON.stringify(state));next.ui.overdueOpen=open;replaceState(next);
 },true);
 function missionControls(){
- return `${missionSearchOpen?`<div class="mission-search"><label class="sr-only" for="missionSearch">Keresés a küldetések között</label><input id="missionSearch" type="search" placeholder="Keresés név szerint…" value="${esc(missionSearch)}" autocomplete="off"><button type="button" class="text-action" data-workflow-action="clearSearch" aria-label="Keresés törlése">×</button></div>`:''}<div class="mission-filters" role="group" aria-label="Küldetések szűrése">${[['all','Összes'],['pending','Hátralévő'],['done','Kész']].map(([value,label])=>`<button data-workflow-action="filter" data-value="${value}" aria-pressed="${state.ui.missionFilter===value}">${label}</button>`).join('')}</div>`;
+ const active=state.ui.missionFilter!=='all';
+ return `<details class="home-filter-menu"><summary class="icon-button home-filter-toggle ${active?'is-filtered':''}" data-filter-toggle aria-label="Feladatok szűrése" aria-controls="homeFilterOptions"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg>${active?'<span class="filter-dot" aria-hidden="true"></span>':''}<span class="sr-only">Aktív: ${({all:'Összes',pending:'Hátralévő',done:'Kész'})[state.ui.missionFilter]}</span></summary><div class="home-filter-options" id="homeFilterOptions" role="group" aria-label="Feladatok szűrése">${[['all','Összes'],['pending','Hátralévő'],['done','Kész']].map(([value,label])=>`<button type="button" data-workflow-action="filter" data-value="${value}" aria-pressed="${state.ui.missionFilter===value}">${label}<span aria-hidden="true">${state.ui.missionFilter===value?'✓':''}</span></button>`).join('')}</div></details>`;
 }
+document.addEventListener('click',event=>{
+ const menu=document.querySelector('.home-filter-menu');
+ if(menu?.open&&!event.target.closest('.home-filter-menu'))menu.open=false;
+});
+document.addEventListener('keydown',event=>{
+ const menu=document.querySelector('.home-filter-menu');
+ if(event.key==='Escape'&&menu?.open){event.preventDefault();menu.open=false;menu.querySelector('summary').focus()}
+});
 function missionResults(items){
  const normalize=text=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('hu-HU');
  const query=normalize(missionSearch.trim()),filter=state.ui.missionFilter;
@@ -132,7 +141,7 @@ document.addEventListener('click',event=>{
  const action=button.dataset.workflowAction,task=state.tasks.find(t=>t.id===button.dataset.id);
  if(action==='filter'){
   const value=button.dataset.value;if(!['all','pending','done'].includes(value))return;
-  const next=JSON.parse(JSON.stringify(state));next.ui.missionFilter=value;if(replaceState(next))render();
+  const next=JSON.parse(JSON.stringify(state));next.ui.missionFilter=value;if(replaceState(next)){render();document.querySelector('[data-filter-toggle]')?.focus({preventScroll:true})}
  }else if(action==='search'){
   missionSearchOpen=!missionSearchOpen;if(!missionSearchOpen)missionSearch='';render();$('#missionSearch')?.focus();
  }else if(action==='clearSearch'){
