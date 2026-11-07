@@ -742,7 +742,7 @@ test('reward icon buttons preserve editing, goals, confirmation, debit and timed
  const row=page.locator(`[data-reward-id="${rewardId}"]`);
  assert.equal(await row.locator('.reward-actions button').count(),2);
  assert.equal(await row.locator('.reward-edit').count(),1);
- assert.equal(await row.locator('.reward-xp').innerText(),'−30\nXP');
+ assert.equal(await row.locator('.reward-meta .reward-cost').innerText(),'−30 XP');
  assert.equal(await row.locator('[data-action=redeem]').isDisabled(),true);
  assert.equal(await row.locator('[data-action=editReward]').innerText(),'🎮');
  assert.equal(await row.locator('.reward-actions [data-action=editReward]').count(),0);
