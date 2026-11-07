@@ -46,7 +46,7 @@ async function resetXP(){
   const next=JSON.parse(JSON.stringify(snapshot));
   next.history.forEach(h=>{if(['task','quest','focus','challenge'].includes(h.type))h.xpReset=true});
   const balance=next.ledger.reduce((sum,entry)=>sum+Number(entry.amount||0),0);
-  next.ledger.push({id:id(),amount:-balance,type:'xp-reset',date:day()});
+  next.ledger.push({id:id(),amount:-balance,type:'xp-reset',date:day()});next.gameFeedback.maxLevel=1;
   if(replaceWithCheckpoint(next,'XP-nullázás előtt')){render();toast('XP és egyenleg nullázva. A teljesítéseid megmaradtak.')}
  });
 }
@@ -59,6 +59,7 @@ function withFocusLock(callback){
 function completeFocus(snapshot,notify=true){
  const timer=normalizeFocus(snapshot.focusTimer);
  if(!timer.running||timer.end>Date.now())return false;
+ prepareGamification(snapshot);const before=gameMetrics(snapshot);
  const points=timer.duration===25?15:35,date=dateKey(new Date(timer.end));
  const credited=snapshot.focusSessions.some(s=>s.id===timer.sessionId);
  if(!credited){
@@ -67,8 +68,7 @@ function completeFocus(snapshot,notify=true){
   snapshot.history.push({id:id(),type:'focus',name:`${timer.duration} perc fókusz`,points,date});
  }
  snapshot.focusTimer={...timer,running:false,remaining:timer.duration*60,end:0,sessionId:null};
- if(!replaceState(snapshot))return false;
- render();if(!credited&&notify)celebrate(points,'Fókuszblokk teljesítve!');return true;
+ return commitGameState(snapshot,before,{points:credited?0:points,notify});
 }
 let focusSettlementPending=false;
 async function focusTick(){
