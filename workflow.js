@@ -1,5 +1,37 @@
 /* Planning and recovery UI. All storage keys derive from the current app/preview KEY. */
 let missionSearch='',missionSearchOpen=false,deleteUndo=null,undoTimeout=null;
+// Three native scroll-snap pages keep swiping available in either direction.
+// Recenter only after the gesture settles; taps still select individual days.
+function initializeDateStrip(){
+ const rail=document.querySelector('.date-strip');if(!rail)return;
+ const date=selectedDate,view=tab;let timer,touching=false;
+ rail.scrollLeft=rail.clientWidth;
+ const settle=()=>{
+  if(touching||!rail.isConnected||selectedDate!==date||tab!==view)return;
+  const width=rail.clientWidth;if(!width)return;
+  const page=Math.round(rail.scrollLeft/width);
+  if(page===1||Math.abs(rail.scrollLeft-page*width)>2)return;
+  selectedDate=shift(date,(page-1)*7);render();
+ };
+ const schedule=()=>{clearTimeout(timer);timer=setTimeout(settle,180)};
+ rail.addEventListener('scroll',schedule,{passive:true});
+ rail.addEventListener('scrollend',settle);
+ rail.addEventListener('touchstart',()=>{touching=true;clearTimeout(timer)},{passive:true});
+ const endTouch=()=>{touching=false;schedule()};
+ rail.addEventListener('touchend',endTouch,{passive:true});
+ rail.addEventListener('touchcancel',endTouch,{passive:true});
+ rail.addEventListener('keydown',event=>{
+  if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+  event.preventDefault();selectedDate=shift(selectedDate,event.key==='ArrowLeft'?-1:1);render();
+  document.querySelector('.date-day.active')?.focus({preventScroll:true});
+ });
+}
+window.addEventListener('resize',()=>{const rail=document.querySelector('.date-strip');if(rail)rail.scrollLeft=rail.clientWidth});
+document.addEventListener('toggle',event=>{
+ if(!event.target.matches('.overdue-card'))return;
+ const open=event.target.open;if((state.ui.overdueOpen===true)===open)return;
+ const next=JSON.parse(JSON.stringify(state));next.ui.overdueOpen=open;replaceState(next);
+},true);
 function missionControls(){
  return `${missionSearchOpen?`<div class="mission-search"><label class="sr-only" for="missionSearch">Keresés a küldetések között</label><input id="missionSearch" type="search" placeholder="Keresés név szerint…" value="${esc(missionSearch)}" autocomplete="off"><button type="button" class="text-action" data-workflow-action="clearSearch" aria-label="Keresés törlése">×</button></div>`:''}<div class="mission-filters" role="group" aria-label="Küldetések szűrése">${[['all','Összes'],['pending','Hátralévő'],['done','Kész']].map(([value,label])=>`<button data-workflow-action="filter" data-value="${value}" aria-pressed="${state.ui.missionFilter===value}">${label}</button>`).join('')}</div>`;
 }

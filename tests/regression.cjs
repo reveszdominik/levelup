@@ -12,10 +12,10 @@ before(async () => {
   });
 });
 after(async () => { await browser?.close(); });
-async function open(t, stored) {
+async function open(t, stored, options = {}) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Budapest',
-    serviceWorkers: 'block', acceptDownloads: true,
+    serviceWorkers: 'block', acceptDownloads: true, ...options,
   });
   t.after(() => context.close());
   // Serve repository assets without a network service or external requests.
@@ -211,7 +211,8 @@ test('quick entry creates one dated todo without awarding XP and supports later 
 test('daily highlight is date-specific, persistent, and gives no extra XP', async t => {
   const page = await open(t);
   const taskId = await page.evaluate(() => state.tasks[0].id);
-  await page.locator('[data-action=highlightModal]').click();
+  assert.equal(await page.locator('.mission-heading [data-action=highlightModal]').count(), 0);
+  await page.evaluate(() => highlightModal());
   await page.locator(`[data-action=setHighlight][data-id="${taskId}"]`).click();
   assert.equal(await page.locator('.daily-highlight-line').isVisible(), true);
   assert.equal(await page.locator('.task-highlighted').count(), 1);
@@ -418,7 +419,7 @@ test('storage failures do not partially reset XP or award a focus block',async t
   assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.focusSessions.length]),[35,35,1]);
 });
 
-test('compact home has no greeting and search/status filters do not change daily totals',async t=>{
+test('compact home has no greeting or search button and status filters do not change daily totals',async t=>{
  const page=await open(t);
  assert.equal(await page.locator('.head').isVisible(),false);
  assert.equal(await page.locator('.home-intro').count(),0);
@@ -430,13 +431,8 @@ test('compact home has no greeting and search/status filters do not change daily
  await page.locator('[data-workflow-action=filter][data-value=pending]').click();
  assert.equal(await page.locator('#missionResults .task-row').count(),3);
  assert.match(await page.locator('.momentum-tasks').innerText(),/1 \/ 4/);
- await page.locator('[data-workflow-action=search]').click();
- await page.locator('#missionSearch').fill('porszivozas');
- assert.equal(await page.locator('#missionResults .task-row').count(),1);
- assert.match(await page.locator('#missionResults').innerText(),/Porszívózás/);
- await page.locator('#missionSearch').fill('nem létezik');
- assert.equal(await page.locator('#missionResults .task-row').count(),0);
- await page.locator('[data-workflow-action=clearFilters]').click();
+ assert.equal(await page.locator('[data-workflow-action=search]').count(),0);
+ await page.locator('[data-workflow-action=filter][data-value=all]').click();
  assert.equal(await page.locator('#missionResults .task-row').count(),4);
  await page.reload();
  assert.deepEqual(await page.evaluate(()=>[xp(),wallet(),state.ui.missionFilter]),[20,20,'all']);
@@ -534,4 +530,74 @@ test('a failed primary write rolls back checkpoint changes without losing either
   return [saved,xp(),localStorage.getItem(KEY),localStorage.getItem(KEY+'-restore')];
  });
  assert.deepEqual(result,[false,20,...before]);
+});
+
+
+async function swipeCalendar(page,direction){
+ const rail=page.locator('.date-strip'),box=await rail.boundingBox();
+ const client=await page.context().newCDPSession(page);
+ const start=box.x+box.width*(direction>0?.85:.15),end=box.x+box.width*(direction>0?.15:.85),y=box.y+box.height/2;
+ await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:start,y}]});
+ for(let i=1;i<=12;i++){
+  await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:start+(end-start)*i/12,y}]});
+  await new Promise(resolve=>setTimeout(resolve,18));
+ }
+ await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await client.detach();
+}
+
+test('native calendar swipes cross weeks and years without changing XP, and support taps and keyboard',async t=>{
+ const page=await open(t,undefined,{hasTouch:true,isMobile:true});
+ await page.evaluate(async()=>{await toggle(state.tasks[0]);selectedDate='2026-12-30';render()});
+ const before=await page.evaluate(()=>JSON.stringify([state.tasks,state.ledger,state.history]));
+ assert.equal(await page.locator('[data-action=dateShift]').count(),0);
+ await swipeCalendar(page,1);
+ await page.waitForFunction(()=>selectedDate==='2027-01-06');
+ assert.match(await page.locator('.week-heading').innerText(),/2027.*január/i);
+ await swipeCalendar(page,-1);await page.waitForFunction(()=>selectedDate==='2026-12-30');
+ await swipeCalendar(page,-1);await page.waitForFunction(()=>selectedDate==='2026-12-23');
+ await page.locator('[data-action=dateSelect][data-date="2026-12-24"]').click();
+ assert.equal(await page.evaluate(()=>selectedDate),'2026-12-24');
+ await page.locator('.date-day.active').press('ArrowRight');
+ assert.equal(await page.evaluate(()=>selectedDate),'2026-12-25');
+ assert.equal(await page.locator('.date-day.active').evaluate(el=>el===document.activeElement),true);
+ await page.setViewportSize({width:320,height:844});
+ await page.waitForFunction(()=>Math.abs(document.querySelector('.date-strip').scrollLeft-document.querySelector('.date-strip').clientWidth)<2);
+ await page.locator('[data-action=dateToday]').click();
+ assert.equal(await page.evaluate(()=>selectedDate===day()),true);
+ assert.equal(await page.evaluate(()=>JSON.stringify([state.tasks,state.ledger,state.history])),before);
+ await page.evaluate(()=>{tab='planner';render()});
+ const next=await page.evaluate(()=>shift(selectedDate,7));
+ await swipeCalendar(page,1);await page.waitForFunction(date=>selectedDate===date,next);
+});
+
+test('compact missions and overdue disclosure retain actions while quick and detailed todo creation stay consistent',async t=>{
+ const page=await open(t);
+ assert.equal(await page.locator('.brand-note,.development-message').count(),0);
+ assert.match(await page.locator('.development-streak').innerText(),/⚡/);
+ await page.locator('.daily-mini-quests > summary').click();
+ assert.ok((await page.locator('.daily-mini-quests').boundingBox()).height<330);
+ const buttons=page.locator('#quickTaskForm button');
+ const bounds=await buttons.evaluateAll(items=>items.map(el=>({height:el.getBoundingClientRect().height,top:el.getBoundingClientRect().top})));
+ assert.equal(bounds[0].height,44);assert.deepEqual(bounds[0],bounds[1]);
+ await page.locator('#quickTaskName').fill('Részletes mai teendő');
+ await page.locator('.detailed-add-button').click();
+ assert.equal(await page.locator('#taskForm [name=kind]').inputValue(),'todo');
+ assert.equal(await page.locator('#taskForm [name=name]').inputValue(),'Részletes mai teendő');
+ await page.locator('#taskForm button[type=submit]').click();
+ assert.equal(await page.evaluate(()=>state.tasks.at(-1).dueDate===day()),true);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[0,0]);
+ await page.locator('#quickTaskName').fill('Gyors mai teendő');await page.locator('.quick-add-button').click();
+ assert.equal(await page.evaluate(()=>state.tasks.at(-1).kind),'todo');
+ const taskId=await page.evaluate(()=>{const task=state.tasks.find(t=>t.kind==='todo');task.created=shift(day(),-2);task.dueDate=task.created;state.subtaskChecks[task.id+':'+task.created]=[0];save();render();return task.id});
+ const overdue=page.locator('.overdue-card');
+ assert.equal(await overdue.evaluate(el=>el.open),false);
+ assert.equal(await page.locator(`[data-action=carry][data-id="${taskId}"]`).isVisible(),false);
+ await overdue.locator('summary').click();await page.reload();
+ assert.equal(await overdue.evaluate(el=>el.open),true);
+ await page.locator(`[data-action=carry][data-id="${taskId}"]`).click();
+ assert.equal(await page.locator('.overdue-card').count(),0);
+ assert.equal(await page.evaluate(taskId=>state.tasks.find(t=>t.id===taskId).dueDate===day(),taskId),true);
+ assert.deepEqual(await page.evaluate(taskId=>state.subtaskChecks[taskId+':'+day()],taskId),[0]);
+ assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[0,0]);
 });
