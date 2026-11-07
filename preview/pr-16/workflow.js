@@ -28,9 +28,10 @@ function initializeDateStrip(){
 }
 window.addEventListener('resize',()=>{const rail=document.querySelector('.date-strip');if(rail)rail.scrollLeft=rail.clientWidth});
 document.addEventListener('toggle',event=>{
- if(!event.target.matches('.overdue-card'))return;
- const open=event.target.open;if((state.ui.overdueOpen===true)===open)return;
- const next=JSON.parse(JSON.stringify(state));next.ui.overdueOpen=open;replaceState(next);
+ const key=event.target.matches('.overdue-card')?'overdueOpen':event.target.matches('.reward-history')?'rewardHistoryOpen':null;
+ if(!key)return;
+ const open=event.target.open;if((state.ui[key]===true)===open)return;
+ const next=JSON.parse(JSON.stringify(state));next.ui[key]=open;replaceState(next);
 },true);
 function filterMenuHTML(value,options,action,label){
  const active=value!=='all',current=options.find(([key])=>key===value)?.[1]||options[0][1];
