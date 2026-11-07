@@ -25,7 +25,7 @@ def prepare(ref, slug, output):
     required = {'index.html', 'app.js', 'pastel.css', 'icon.svg'}
     if not required <= files:
         raise ValueError('The revision is missing required application assets.')
-    assets = {name: git('show', sha + ':' + name) for name in required | ({'features.js', 'workflow.js'} & files)}
+    assets = {name: git('show', sha + ':' + name) for name in required | ({'features.js', 'workflow.js', 'gamification.js'} & files)}
     app = replace_once(assets['app.js'], "const KEY='levelup-v1'", f"const KEY='levelup-preview-{slug}-v1'")
     # A Pages subpath shares its origin with production. Do not register a worker
     # that could delete production caches, or reuse production push subscriptions.
