@@ -18,7 +18,7 @@ Fejlesztői ellenőrzés
 ```sh
 node --check app.js
 node --check sw.js
-node --test --test-timeout=90000 tests/regression.cjs
+node --test --test-timeout=120000 tests/regression.cjs
 ```
 
 A böngészős tesztekhez Node.js, a `playwright` modul és Chromium szükséges. Az előkészített Codex-környezet ezeket tartalmazza. Más környezetben telepítsd a Playwrightot fejlesztői eszközként, és a `CHROMIUM_PATH` környezeti változóval add meg a Chromium futtatható fájlját (alapérték: `/usr/bin/chromium`). Az alkalmazás futtatása továbbra sem igényel függőséget vagy buildlépést. A tesztek elkülönített böngészőadatokat használnak, külső szolgáltatás nélkül.
@@ -63,3 +63,13 @@ python3 scripts/prepare-preview.py --ref <ellenőrzött-fejlesztési-commit> --s
 Csak a generált tesztkönyvtár és az esetleges tesztinfrastruktúra változásait kell feltölteni és beolvasztani; a fejlesztés gyökérkönyvtári alkalmazásfájljait nem. A GitHub Pages sikeres közzététele után a tesztlink: `https://reveszdominik.github.io/levelup/preview/pr-<szám>/`. Az új előnézetet mindig az adott PR aktuális, ellenőrzött commitjából kell újragenerálni; a forrás commitja a tesztkönyvtár `preview.json` fájljában található. A végleges élesítés továbbra is a fejlesztési PR külön beolvasztása.
 
 A tesztkönyvtár saját localStorage-kulcsot és fókuszzárolási nevet használ, ezért az éles alkalmazás adatai és XP-je nem változnak a teszteléstől. Nem regisztrál service workert, nem telepíthető PWA-ként, és a tesztből nem módosíthatók az éles értesítések. A tesztadatok ugyanabban a böngészőben később is megmaradnak; új PR új tesztadatokkal indul. Ezek statikus, nyilvános tesztoldalak: valódi személyes adatot ne töltsünk a repositoryba.
+
+Keresés, átütemezés és biztonságos visszavonás
+
+- A kezdőlapi köszöntő és mottó kikerült. A szintkártya rövid összefoglalót ad a szintről, a következő szintig szükséges XP-ről és az egyenlegről.
+- A nagyító megnyitja a név szerinti keresést; ékezet nélkül is kereshetsz. Az Összes / Hátralévő / Kész szűrő nem változtatja meg a napi összesítéseket. A kiválasztott szűrő a korábbi ui objektum opcionális missionFilter mezőjében marad meg.
+- A még nem teljesített teendők holnapra, hétvégére vagy tetszőleges dátumra ütemezhetők át. Az új napra átkerülnek a részfeladatok jelölései is. A teljesített teendők dátuma megmarad.
+- A Feladatok nézetből, a szokásszerkesztőből vagy a Beállításokból legfeljebb 366 napos szünet tervezhető egy vagy minden aktív szokásnak. Ma vagy későbbi időszakra adható hozzá és törölhető; a már teljesített napokat a tervező nem szünetelteti. A korábbi paused dátumlista tárolja az értékeket, az előzmények és XP változatlanok.
+- Feladat vagy jutalom törlése 12 másodpercig visszavonható. A visszavonás csak a törölt elemet állítja vissza, a közben elvégzett teljesítéseket nem írja felül. Újabb törlés lecseréli az előző rövid visszavonási lehetőséget; újratöltéskor ez lejár.
+- Importálás, XP-nullázás és teljes törlés előtt egy külön, alkalmazáskulcsból képzett localStorage-bejegyzés őrzi az előző állapotot (levelup-v1-restore). A Beállításokban újratöltés után is visszaállítható. A visszaállítás az összes azóta végzett változtatást lecseréli; az aktuális állapot kerül a visszaállítási pont helyére. Sérült főmentés mellett is elérhető a korábbi pont. Ha a biztonsági mentés nem tárolható, az eredeti adatokat nem cseréljük le. Ez helyi védelem, nem külső biztonsági mentés.
+- A workflow.js helyi fájl a többi alkalmazásszkript előtt töltődik be, és része a PWA cache-nek. A tesztoldalak saját visszaállítási kulcsot is használnak.

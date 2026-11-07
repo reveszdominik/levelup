@@ -47,7 +47,7 @@ async function resetXP(){
   next.history.forEach(h=>{if(['task','quest','focus','challenge'].includes(h.type))h.xpReset=true});
   const balance=next.ledger.reduce((sum,entry)=>sum+Number(entry.amount||0),0);
   next.ledger.push({id:id(),amount:-balance,type:'xp-reset',date:day()});
-  if(replaceState(next)){render();toast('XP és egyenleg nullázva. A teljesítéseid megmaradtak.')}
+  if(replaceWithCheckpoint(next,'XP-nullázás előtt')){render();toast('XP és egyenleg nullázva. A teljesítéseid megmaradtak.')}
  });
 }
 function loadSavedState(){
