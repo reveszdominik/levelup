@@ -159,8 +159,8 @@ test('chart labels align with dates; all visible mobile views load', async t => 
     new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(fromKey(d))));
   const hu = { Mon: 'H', Tue: 'K', Wed: 'Sze', Thu: 'Cs', Fri: 'P', Sat: 'Szo', Sun: 'V' };
   assert.deepEqual(labels, expected.map(x => hu[x]));
-  for (const tab of ['today', 'planner', 'tasks', 'rewards', 'stats', 'settings']) {
-    if (['tasks', 'settings'].includes(tab)) await page.locator('[data-action=more]').click();
+  for (const tab of ['today', 'planner', 'rewards', 'stats', 'settings']) {
+    if (tab==='settings') await page.locator('[data-action=more]').click();
     await page.locator(`[data-tab=${tab}]`).click();
     assert.ok((await page.locator('#view').innerText()).length > 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -272,8 +272,7 @@ test('archiving removes a habit from active views without losing history and res
   await page.locator('#nav [data-tab=stats]').click();
   await page.locator('[data-stats-fold=habits]>summary').click();
   assert.match(await page.locator(`[data-stats-fold="habit:${taskId}"]>summary`).innerText(), /Archivált/);
-  await page.locator('[data-action=more]').click();
-  await page.locator('#modalRoot [data-tab=tasks]').click();
+  await page.locator('#nav [data-tab=planner]').click();
   await page.locator('.archived-habits summary').click();
   await page.locator(`[data-action=restoreTask][data-id="${taskId}"]`).click();
   await page.locator('#nav [data-tab=today]').click();
@@ -436,8 +435,8 @@ async function showFocus(page){
 test('habit management shares header controls and filters while preserving history and independent filters',async t=>{
  const page=await open(t);
  await page.locator('[data-action=more]').click();
- assert.equal(await page.locator('[data-tab=focus]').count(),0);
- await page.locator('#modalRoot [data-tab=tasks]').click();
+ assert.equal(await page.locator('[data-tab=focus],[data-tab=tasks]').count(),0);
+ await page.locator('#modalRoot [data-action=close]').click();await page.locator('#nav [data-tab=planner]').click();
  const taskId=await page.evaluate(()=>{
   state.ui.missionFilter='done';state.ui.rewardFilter='goal';
   state.focusSessions=[{id:'old-focus',date:shift(day(),-1),minutes:25}];save();render();return state.tasks[0].id;
@@ -461,7 +460,7 @@ test('habit management shares header controls and filters while preserving histo
  page.once('dialog',dialog=>dialog.accept());await page.locator('#modalRoot [data-action=archiveTask]').click();
  await filter('archived');
  assert.equal(await page.locator('.managed-habit').count(),1);
- await page.reload();await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-tab=tasks]').click();
+ await page.reload();await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-action=close]').click();await page.locator('#nav [data-tab=planner]').click();
  assert.equal(await page.locator('.managed-habit').count(),1);
  assert.equal(await page.evaluate(()=>state.ui.habitFilter),'archived');
  await page.locator(`[data-action=restoreTask][data-id="${taskId}"]`).click();
@@ -479,7 +478,7 @@ test('habit management shares header controls and filters while preserving histo
   await page.setViewportSize({width,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  }
- await page.reload();await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-tab=tasks]').click();
+ await page.reload();await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-action=close]').click();await page.locator('#nav [data-tab=planner]').click();
  assert.equal(await page.locator('.archived-habits').evaluate(el=>el.open),true);
 });
 
@@ -592,8 +591,8 @@ test('header filter dropdown preserves status filtering, daily totals and curren
  assert.equal(await page.locator('#missionResults .task-row').count(),4);
  assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[20,20]);
  await page.getByRole('button',{name:'Szint',exact:true}).click();
- assert.equal(await page.locator('.development-streak').innerText(),badge);
- assert.equal(await page.locator('#homeActions').isVisible(),false);
+ assert.equal(await page.locator('.level-development .development-streak').innerText(),badge);
+ assert.equal(await page.locator('#homeActions').isVisible(),true);
 });
 
 test('rescheduling keeps partial steps and completed todo dates cannot be rewritten',async t=>{
@@ -618,7 +617,7 @@ test('rescheduling keeps partial steps and completed todo dates cannot be rewrit
 
 test('planned pause ranges can be added/removed and keep the streak across the break',async t=>{
  const page=await open(t);await page.clock.install({time:new Date('2026-11-02T12:00:00+01:00')});
- const taskId=await page.evaluate(()=>{state=migrate(seed());const t=state.tasks[0];t.created='2026-11-01';t.days=['2026-11-01'];selectedDate=day();save();tab='tasks';render();return t.id});
+ const taskId=await page.evaluate(()=>{state=migrate(seed());const t=state.tasks[0];t.created='2026-11-01';t.days=['2026-11-01'];selectedDate=day();save();tab='planner';render();return t.id});
  for(const mode of ['add','remove','add']){
   await page.locator(`[data-workflow-action=habitActions][data-id="${taskId}"]`).click();
   await page.locator(`[data-workflow-action=pausePlan][data-id="${taskId}"]`).click();
@@ -734,7 +733,7 @@ test('header actions align with the streak and overdue tasks keep their steps wh
  const page=await open(t);
  assert.equal(await page.locator('.brand-note,.development-message').count(),0);
  await page.locator('[data-tab=planner]').click();
- assert.match(await page.locator('.development-streak').innerText(),/⚡/);
+ assert.match(await page.locator('.level-development .development-streak').innerText(),/⚡/);
  assert.ok((await page.locator('.challenge-group-daily .mini-quest-list').boundingBox()).height<240);
  await page.locator('[data-tab=today]').click();
  const bounds=await page.locator('.home-add,.home-filter-toggle,#homeActions .development-streak').evaluateAll(items=>items.map(el=>({height:el.getBoundingClientRect().height,top:el.getBoundingClientRect().top})));
@@ -767,7 +766,14 @@ test('Szint tab keeps separate always-visible level and challenge cards while ho
  assert.equal(await page.locator('.level-page > .card').count(),2);
  assert.equal(await page.locator('.level-page > .card').nth(0).evaluate(el=>el.classList.contains('level-development')),true);
  assert.equal(await page.locator('.level-page > .card').nth(1).evaluate(el=>el.classList.contains('daily-mini-quests')),true);
- assert.equal(await page.locator('.date-strip,.week-planner,#quickTaskForm,[data-action=editTask]').count(),0);
+ assert.equal(await page.locator('.date-strip,.week-planner,#quickTaskForm').count(),0);
+ assert.equal(await page.locator('.level-page').evaluate(el=>[...el.children].map(x=>x.className).join('|')),'card daily-progress daily-development level-development|card daily-mini-quests|level-task-manager');
+ assert.equal(await page.locator('#levelTasksTitle').innerText(),'Feladataim');
+ const cards=await page.locator('.level-page>.card').allTextContents();
+ await page.locator('[data-filter-toggle]').click();await page.locator('[data-workflow-action=habitFilter][data-value=archived]').click();
+ assert.deepEqual(await page.locator('.level-page>.card').allTextContents(),cards);
+ await page.locator('[data-filter-toggle]').click();await page.locator('[data-workflow-action=habitFilter][data-value=all]').click();
+ assert.equal(await page.locator('.level-task-manager .managed-habit').count(),3);
  assert.equal(await page.locator('.daily-mini-quests details,.daily-mini-quests summary').count(),0);
  assert.equal(await page.locator('#challengesTitle').innerText(),'Kihívások');
  assert.equal(await page.locator('.challenge-group-daily').isVisible(),true);
