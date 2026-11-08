@@ -44,7 +44,7 @@ function missionDefinitions(s,date){
  return [
   capacity?{slot:'count',kind:'count',target:Math.min(3,capacity),points:20}:{slot:'count',kind:'create',target:1,points:20},
   {slot:'xp',kind:'xp',target:possible>0?Math.min(100,possible):15,points:15},
-  habits.length?{slot:'habit',kind:'habit',target:1,category,taskIds:habits.filter(t=>t.category===category).map(t=>t.id),points:10}:{slot:'habit',kind:'focus',target:1,points:10},
+  habits.length?{slot:'habit',kind:'habit',target:1,category,taskIds:habits.filter(t=>t.category===category).map(t=>t.id),points:10}:{slot:'habit',kind:'createHabit',target:1,points:10},
  ];
 }
 function missionProgress(s,mission,date){
@@ -52,6 +52,7 @@ function missionProgress(s,mission,date){
  if(mission.kind==='count')return done.size;
  if(mission.kind==='xp')return gameXP(s,date,true);
  if(mission.kind==='habit')return (mission.taskIds||[]).filter(id=>done.has(id)).length;
+ if(mission.kind==='createHabit')return s.tasks.filter(t=>t.kind==='habit'&&!t.archived&&t.created===date).length;
  if(mission.kind==='create')return s.tasks.filter(t=>t.kind==='todo'&&t.created===date&&(t.dueDate||t.created)===date).length;
  return new Set(s.focusSessions.filter(f=>f.date===date).map(f=>f.id)).size;
 }
@@ -59,13 +60,14 @@ function missionKey(date,slot){return slot==='count'?'daily3:'+date:'mini8:'+dat
 function prepareGamification(s,date=day()){
  normalizeGame(s);
  const definitions=missionDefinitions(s,date),old=s.dailyMissions[date];
- const valid=old&&old.date===date&&Array.isArray(old.missions)&&old.missions.length===3&&old.missions.every((m,i)=>m&&typeof m==='object'&&(m.kind!=='habit'||(typeof m.category==='string'&&Array.isArray(m.taskIds)&&m.taskIds.every(id=>typeof id==='string')))&&m.slot===definitions[i].slot&&['count','xp','habit','create','focus'].includes(m.kind)&&Number.isFinite(m.target)&&m.target>0&&m.target<=(m.kind==='count'?3:m.kind==='xp'?100:1));
+ const valid=old&&old.date===date&&Array.isArray(old.missions)&&old.missions.length===3&&old.missions.every((m,i)=>m&&typeof m==='object'&&(m.kind!=='habit'||(typeof m.category==='string'&&Array.isArray(m.taskIds)&&m.taskIds.every(id=>typeof id==='string')))&&m.slot===definitions[i].slot&&['count','xp','habit','create','createHabit','focus'].includes(m.kind)&&Number.isFinite(m.target)&&m.target>0&&m.target<=(m.kind==='count'?3:m.kind==='xp'?100:1));
  const plan=valid?old:{date,missions:definitions};
  plan.missions=plan.missions.map((previous,i)=>{
   const key=missionKey(date,previous.slot),claimed=s.questClaims.includes(key)||s.history.some(h=>h.missionKey===key);
   const progress=missionProgress(s,previous,date);let mission={...previous,points:definitions[i].points};
   if(!claimed&&progress<previous.target){
    if(previous.kind==='count'||previous.kind==='xp')mission={...definitions[i],target:Math.min(previous.target,definitions[i].target)};
+   else if(previous.kind==='focus')mission=definitions[i];
    else if(previous.kind==='habit'){
     const matching=dailyAvailable(s,date).filter(t=>t.kind==='habit'&&t.category===previous.category).map(t=>t.id);
     mission=matching.length?{...mission,taskIds:matching}:definitions[i];
@@ -79,6 +81,7 @@ function missionTitle(m){
  if(m.kind==='count')return `Teljesíts ${m.target} feladatot`;
  if(m.kind==='xp')return `Szerezz ${m.target} XP-t`;
  if(m.kind==='habit')return `Teljesíts egy ${m.category.toLocaleLowerCase('hu-HU')} szokást`;
+ if(m.kind==='createHabit')return 'Adj hozzá egy szokást';
  if(m.kind==='create')return 'Adj hozzá egy mai teendőt';
  return 'Teljesíts egy fókuszblokkot';
 }
@@ -111,7 +114,7 @@ function miniMissionsHTML(){
 
 function levelPageHTML(){
  const today=day(),visible=state.tasks.filter(t=>!t.archived&&scheduled(t,today));
- return `<div class="level-page">${dailyDevelopmentHTML(visible,{date:today})}${miniMissionsHTML()}</div>`;
+ return `<div class="level-page">${dailyDevelopmentHTML(visible,{date:today})}${miniMissionsHTML()}<section class="level-task-manager" aria-labelledby="levelTasksTitle"><h2 id="levelTasksTitle">Feladataim</h2>${tasksPageHTML()}</section></div>`;
 }
 
 function gameMetrics(s){return {level:gameLevel(s),xp:gameXP(s),daily:gameXP(s,day()),goal:s.settings.dailyXPGoal,maxLevel:s.gameFeedback.maxLevel,goalShown:!!s.gameFeedback.goalDays[day()]}}

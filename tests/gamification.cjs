@@ -85,10 +85,31 @@ test('mini missions use reachable tasks and adapt when a category becomes unavai
  await page.evaluate(()=>{state.tasks.find(t=>t.category==='Egészség').archived=true;save();render()});
  assert.notEqual(await page.evaluate(()=>state.dailyMissions[day()].missions[2].category),'Egészség');
  await page.evaluate(()=>{state.tasks.forEach(t=>{t.archived=true});save();render()});
- assert.deepEqual(await page.evaluate(()=>state.dailyMissions[day()].missions.map(m=>m.kind)),['create','xp','focus']);
+ assert.deepEqual(await page.evaluate(()=>state.dailyMissions[day()].missions.map(m=>m.kind)),['create','xp','createHabit']);
  assert.equal(await page.evaluate(()=>state.dailyMissions[day()].missions.every(m=>m.target>0)),true);
  await addTodo(page,'Elérhető mai teendő');
  assert.equal(await page.evaluate(()=>state.dailyMissions[day()].missions[0].completed),true);
+});
+
+test('hidden focus no longer creates inaccessible missions and old claimed bonuses stay credited once',async t=>{
+ const page=await open(t);
+ await page.evaluate(()=>{
+  state.tasks=[];prepareGamification(state);
+  state.dailyMissions[day()].missions[2]={slot:'habit',kind:'focus',target:1,points:10};
+  state.focusSessions=[];save();render();
+ });
+ assert.equal(await page.evaluate(()=>state.dailyMissions[day()].missions[2].kind),'createHabit');
+ await page.locator('.home-add').click();await page.locator('#taskForm [name=kind]').selectOption('habit');
+ await page.locator('#taskForm [name=name]').fill('Új szokás');await page.locator('#taskForm button[type=submit]').click();
+ assert.equal(await page.evaluate(()=>state.dailyMissions[day()].missions[2].completed),true);
+ await page.evaluate(async()=>{await claimMini('habit',day());await claimMini('habit',day())});
+ assert.equal(await page.evaluate(()=>state.history.filter(h=>h.missionKey===missionKey(day(),'habit')).length),1);
+ const earned=await page.evaluate(()=>xp());
+ await page.evaluate(()=>{state.dailyMissions[day()].missions[2].kind='focus';save();render()});
+ await page.reload();
+ assert.equal(await page.evaluate(()=>state.dailyMissions[day()].missions[2].claimed),true);
+ await page.evaluate(async()=>{await claimMini('habit',day())});
+ assert.equal(await page.evaluate(()=>xp()),earned);
 });
 
 test('rapid completion and repeated mini claims award once, persist, and preserve reversal accounting',async t=>{

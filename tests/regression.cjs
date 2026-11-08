@@ -149,18 +149,18 @@ test('editing an old task preserves subtasks and checks through reload', async t
   })), { name: 'Átnevezett szokás', subtasks: ['Első lépés', 'Második lépés'], checks: [1] });
 });
 
-test('chart labels align with dates; all seven mobile views load', async t => {
+test('chart labels align with dates; all visible mobile views load', async t => {
   const page = await open(t);
   const labels = await page.evaluate(() => {
     const root = document.createElement('div'); root.innerHTML = weeklyXPChart();
     return [...root.querySelectorAll('.xp-column small')].map(x => x.textContent);
   });
-  const expected = await page.evaluate(() => Array.from({ length: 7 }, (_, i) =>
-    new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(fromKey(shift(day(), i - 6)))));
+  const expected = await page.evaluate(() => statsWeekDates().map(d =>
+    new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(fromKey(d))));
   const hu = { Mon: 'H', Tue: 'K', Wed: 'Sze', Thu: 'Cs', Fri: 'P', Sat: 'Szo', Sun: 'V' };
   assert.deepEqual(labels, expected.map(x => hu[x]));
-  for (const tab of ['today', 'planner', 'tasks', 'rewards', 'stats', 'focus', 'settings']) {
-    if (['tasks', 'focus', 'settings'].includes(tab)) await page.locator('[data-action=more]').click();
+  for (const tab of ['today', 'planner', 'rewards', 'stats', 'settings']) {
+    if (tab==='settings') await page.locator('[data-action=more]').click();
     await page.locator(`[data-tab=${tab}]`).click();
     assert.ok((await page.locator('#view').innerText()).length > 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -181,9 +181,10 @@ test('home preferences, reward shortcut and more menu preserve existing data', a
   await page.getByRole('button', { name: 'Jutalombolt megnyitása', exact: true }).click();
   assert.equal(await page.locator('#pageTitle').innerText(), 'Jutalombolt');
   await page.getByRole('button', { name: 'Továbbiak', exact: true }).click();
-  await page.locator('#modalRoot [data-tab=focus]').click();
+  assert.equal(await page.locator('[data-tab=focus]').count(),0);
+  await page.locator('#modalRoot [data-tab=settings]').click();
   assert.equal(await page.locator('#modalRoot').innerText(), '');
-  assert.equal(await page.locator('#pageTitle').innerText(), 'Fókusz');
+  assert.equal(await page.locator('#pageTitle').innerText(), 'Beállítások');
   assert.equal(await page.evaluate(() => localStorage.getItem(KEY)), saved);
   await page.reload();
   assert.equal(await page.locator('[data-home-block]').first().getAttribute('data-home-block'), 'wish');
@@ -266,14 +267,12 @@ test('archiving removes a habit from active views without losing history and res
   assert.equal(await page.evaluate(() => JSON.stringify({
     history:state.history, ledger:state.ledger, checks:state.subtaskChecks, days:state.tasks[0].days,
   })), original);
-  await page.locator('[data-action=more]').click();
-  await page.locator('#modalRoot [data-tab=focus]').click();
+  await showFocus(page);
   assert.equal(await page.locator(`#focusTask option[value="${taskId}"]`).count(), 0);
   await page.locator('#nav [data-tab=stats]').click();
-  assert.match(await page.locator('.habit-stats').first().innerText(), /Archivált/);
-  await page.locator('[data-action=more]').click();
-  await page.locator('#modalRoot [data-tab=tasks]').click();
-  await page.locator('.archived-habits summary').click();
+  await page.locator('[data-stats-fold=habits]>summary').click();
+  assert.match(await page.locator(`[data-stats-fold="habit:${taskId}"]>summary`).innerText(), /Archivált/);
+  await page.locator('#nav [data-tab=planner]').click();
   await page.locator(`[data-action=restoreTask][data-id="${taskId}"]`).click();
   await page.locator('#nav [data-tab=today]').click();
   assert.equal(await page.locator(`[data-action=toggle][data-id="${taskId}"]`).isVisible(), true);
@@ -352,16 +351,155 @@ test('weekly review compares matching weekdays and respects pauses and weekly ta
     tab='stats';render();
   });
   assert.match(await page.locator('.review-comparison').innerText(),/\+2 teljesítés/);
-  assert.match(await page.locator('.review-insight').innerText(),/30 perc olvasás/);
-  await page.locator('.weekly-review summary').click();
-  assert.match(await page.locator('.review-habit').nth(0).innerText(),/2\/2/);
-  assert.match(await page.locator('.review-habit').nth(1).innerText(),/1\/2/);
+  await page.locator('[data-stats-fold=habits]>summary').click();
+  assert.equal(await page.locator('.stats-habit-progress').nth(0).innerText(),'2/2');
+  assert.equal(await page.locator('.stats-habit-progress').nth(1).innerText(),'1/2');
+  assert.deepEqual(await page.locator('.xp-column strong').allTextContents(),['50','20','0']);
+  assert.equal(await page.locator('.review-numbers strong').nth(1).innerText(),'70');
+  assert.equal(await page.locator('.review-insight').count(),0);
+});
+
+test('progress disclosures, habit details and history selection persist without changing user records',async t=>{
+ const page=await open(t);
+ const original=await page.evaluate(async()=>{
+  await toggle(state.tasks[0]);await toggle(state.tasks[1]);
+  state.tasks[0].name='<b>Olvasás</b>';save();tab='stats';render();
+  return JSON.stringify({tasks:state.tasks,history:state.history,ledger:state.ledger,rewards:state.rewards,settings:state.settings});
+ });
+ assert.equal(await page.locator('#view>.card').count(),5);
+ assert.equal(await page.locator('.stats-fold[open]').count(),0);
+ assert.equal(await page.locator('#view').getByText('Szint',{exact:true}).count(),0);
+ assert.equal(await page.locator('#view').getByText('Achievementek',{exact:true}).count(),0);
+ for(const key of ['habits','activity','badges','history'])await page.locator(`[data-stats-fold=${key}]>summary`).click();
+ await page.waitForFunction(()=>state.ui.statsOpen.length===4);
+ const habit=page.locator('.stats-habit').first();
+ await habit.locator('summary').focus();await page.keyboard.press('Enter');
+ await page.waitForFunction(()=>state.ui.statsOpen.some(k=>k.startsWith('habit:')));
+ assert.match(await habit.innerText(),/Következő mérföldkő: 10 teljesítés · 1\/10/);
+ assert.equal(await habit.locator('summary b').count(),0);
+ await habit.locator('[data-action=habitCalendar]').click();
+ assert.equal(await page.locator('.calendar-grid').isVisible(),true);
+ await page.locator('#modalRoot [data-action=close]').click();
+ await page.locator('[data-workflow-action=statsHistory][data-value=todos]').click();
+ assert.match(await page.locator('.stats-history-list').innerText(),/Porszívózás/);
+ await page.reload();await page.locator('#nav [data-tab=stats]').click();
+ assert.equal(await page.locator('.stats-fold[open]').count(),4);
+ assert.equal(await page.locator('.stats-habit[open]').count(),1);
+ assert.equal(await page.locator('[data-workflow-action=statsHistory][data-value=todos]').getAttribute('aria-pressed'),'true');
+ for(const width of [320,375,390,430,900]){
+  await page.setViewportSize({width,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ }
+ assert.equal(await page.evaluate(()=>JSON.stringify({tasks:state.tasks,history:state.history,ledger:state.ledger,rewards:state.rewards,settings:state.settings})),original);
+ await page.locator('[data-stats-fold=activity]>summary').click();
+ await page.waitForFunction(()=>!state.ui.statsOpen.includes('activity'));
+ await page.reload();await page.locator('#nav [data-tab=stats]').click();
+ assert.equal(await page.locator('[data-stats-fold=activity]').getAttribute('open'),null);
+});
+
+test('progress handles empty and legacy data, week boundaries and failed preference saves',async t=>{
+ const page=await open(t,JSON.stringify({tasks:[],rewards:[],ledger:[],history:[]}));
+ await page.locator('#nav [data-tab=stats]').click();
+ await page.locator('[data-stats-fold=habits]>summary').click();
+ assert.match(await page.locator('[data-stats-fold=habits]').innerText(),/Még nincs szokásod/);
+ await page.locator('[data-stats-fold=history]>summary').click();
+ assert.match(await page.locator('.stats-history-list').innerText(),/Még nincs esemény/);
+ await page.locator('[data-workflow-action=statsHistory][data-value=todos]').click();
+ assert.match(await page.locator('.stats-history-list').innerText(),/Még nincs teljesített teendő/);
+ await page.clock.install({time:new Date('2027-01-04T12:00:00+01:00')});
+ await page.evaluate(()=>{
+  state.history=[{id:id(),type:'task',date:'2027-01-03',points:99},{id:id(),type:'task',date:day(),points:20,xpReset:true},{id:id(),type:'focus',date:day(),points:15}];
+  save();render();
+ });
+ assert.equal(await page.locator('.xp-column').count(),1);
+ assert.equal(await page.locator('.xp-column small').innerText(),'H');
+ assert.equal(await page.locator('.xp-column strong').innerText(),'15');
+ assert.equal(await page.locator('.review-numbers strong').nth(0).innerText(),'1');
+ assert.equal(await page.locator('.review-numbers strong').nth(1).innerText(),'15');
+ const saved=await page.evaluate(()=>{
+  window.realSetItem=Storage.prototype.setItem;Storage.prototype.setItem=()=>{throw Error('QuotaExceededError')};return localStorage.getItem(KEY);
+ });
+ await page.locator('[data-stats-fold=badges]>summary').click();
+ await page.getByText('Mentés sikertelen – a korábbi adatok változatlanok.',{exact:true}).waitFor();
+ assert.equal(await page.locator('[data-stats-fold=badges]').getAttribute('open'),null);
+ assert.equal(await page.evaluate(()=>localStorage.getItem(KEY)),saved);
+ await page.evaluate(()=>{Storage.prototype.setItem=window.realSetItem});
 });
 
 async function showFocus(page){
-  await page.locator('[data-action=more]').click();
-  await page.locator('#modalRoot [data-tab=focus]').click();
+  // The view is hidden from navigation; keep testing stored timer accounting.
+  await page.evaluate(()=>{close();tab='focus';render()});
 }
+
+test('habit management shares header controls and filters while preserving history and independent filters',async t=>{
+ const page=await open(t);
+ await page.locator('[data-action=more]').click();
+ assert.equal(await page.locator('[data-tab=focus],[data-tab=tasks]').count(),0);
+ await page.locator('#modalRoot [data-action=close]').click();await page.locator('#nav [data-tab=planner]').click();
+ const taskId=await page.evaluate(()=>{
+  state.ui.missionFilter='done';state.ui.rewardFilter='goal';
+  state.focusSessions=[{id:'old-focus',date:shift(day(),-1),minutes:25}];save();render();return state.tasks[0].id;
+ });
+ const records=await page.evaluate(()=>JSON.stringify({history:state.history,ledger:state.ledger,focusSessions:state.focusSessions}));
+ const activeGroups=page.locator('.managed-list>.managed-category');
+ assert.deepEqual(await activeGroups.locator(':scope>summary>strong').allTextContents(),['Egészség','Tanulás','Egyéb']);
+ const category=activeGroups.nth(1);
+ await category.locator('summary').press('Enter');
+ await page.waitForFunction(()=>state.ui.collapsedHabitCategories.length===1);
+ assert.equal(await category.locator('.managed-habit').isVisible(),false);
+ await page.locator('#nav [data-tab=today]').click();await page.locator('#nav [data-tab=planner]').click();
+ assert.equal(await activeGroups.nth(1).getAttribute('open'),null);
+ await page.reload();await page.locator('#nav [data-tab=planner]').click();
+ assert.equal(await activeGroups.nth(1).getAttribute('open'),null);
+ await activeGroups.nth(1).locator('summary').click();
+ await page.waitForFunction(()=>state.ui.collapsedHabitCategories.length===0);
+ const controls=await page.locator('#homeActions .home-add,#homeActions .home-filter-toggle,#homeActions .development-streak').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().height));
+ assert.deepEqual(controls,[44,44,44]);
+ assert.equal(await page.locator('#view [data-action=archiveTask]').count(),0);
+ const filter=async value=>{await page.locator('[data-filter-toggle]').click();await page.locator(`[data-workflow-action=habitFilter][data-value=${value}]`).first().click()};
+ await filter('paused');
+ assert.equal(await page.locator('.managed-habit').count(),0);
+ assert.match(await page.locator('#view').innerText(),/Nincs a szűrésnek megfelelő szokás/);
+ await page.locator('[data-workflow-action=habitFilter][data-value=all]').last().click();
+ for(const expected of [true,false]){
+  await page.locator(`[data-workflow-action=habitActions][data-id="${taskId}"]`).click();
+  await page.locator('#modalRoot [data-action=pause]').click();
+  assert.equal(await page.evaluate(id=>state.tasks.find(t=>t.id===id).paused.includes(day()),taskId),expected);
+  assert.equal(await page.locator('#modalRoot .modal').count(),0);
+ }
+ await page.locator(`[data-workflow-action=habitActions][data-id="${taskId}"]`).click();
+ page.once('dialog',dialog=>dialog.accept());await page.locator('#modalRoot [data-action=archiveTask]').click();
+ const archivedRow=page.locator(`[data-managed-id="${taskId}"]`);
+ assert.equal(await archivedRow.isVisible(),true);
+ assert.match(await archivedRow.getAttribute('class'),/is-archived/);
+ assert.equal(await archivedRow.locator('.name').evaluate(el=>getComputedStyle(el).textDecorationLine.includes('line-through')),true);
+ assert.equal(await archivedRow.locator('.emoji-edit').evaluate(el=>getComputedStyle(el).filter),'grayscale(1)');
+ assert.equal(await page.locator('.archived-habits').count(),0);
+ await filter('active');assert.equal(await archivedRow.count(),0);
+ await filter('archived');
+ assert.equal(await page.locator('.managed-habit').count(),1);
+ await page.reload();await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-action=close]').click();await page.locator('#nav [data-tab=planner]').click();
+ assert.equal(await page.locator('.managed-habit').count(),1);
+ assert.equal(await page.evaluate(()=>state.ui.habitFilter),'archived');
+ await page.locator(`[data-action=restoreTask][data-id="${taskId}"]`).click();
+ assert.equal(await page.locator('.managed-habit').count(),0);
+ await filter('all');
+ assert.equal(await page.locator(`[data-managed-id="${taskId}"]`).count(),1);
+ assert.deepEqual(await page.evaluate(()=>[state.ui.missionFilter,state.ui.rewardFilter]),['done','goal']);
+ assert.equal(await page.evaluate(()=>JSON.stringify({history:state.history,ledger:state.ledger,focusSessions:state.focusSessions})),records);
+ await page.locator('.home-add').click();
+ assert.equal(await page.locator('#taskForm [name=kind]').inputValue(),'habit');
+ await page.locator('#taskForm [name=name]').fill('Új szokás');await page.locator('#taskForm button[type=submit]').click();
+ await activeGroups.first().locator('summary').click();
+ await page.waitForFunction(()=>state.ui.collapsedHabitCategories.length===1);
+ for(const width of [320,375,390,430,900]){
+  await page.setViewportSize({width,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ }
+ await page.reload();await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-action=close]').click();await page.locator('#nav [data-tab=planner]').click();
+ assert.equal(await activeGroups.first().getAttribute('open'),null);
+});
+
 test('focus survives reload and pause, settles a closed block once, and resets safely',async t=>{
   const page=await open(t);await showFocus(page);
   await page.locator('[data-action=focusStart]').click();
@@ -471,8 +609,8 @@ test('header filter dropdown preserves status filtering, daily totals and curren
  assert.equal(await page.locator('#missionResults .task-row').count(),4);
  assert.deepEqual(await page.evaluate(()=>[xp(),wallet()]),[20,20]);
  await page.getByRole('button',{name:'Szint',exact:true}).click();
- assert.equal(await page.locator('.development-streak').innerText(),badge);
- assert.equal(await page.locator('#homeActions').isVisible(),false);
+ assert.equal(await page.locator('.level-development .development-streak').innerText(),badge);
+ assert.equal(await page.locator('#homeActions').isVisible(),true);
 });
 
 test('rescheduling keeps partial steps and completed todo dates cannot be rewritten',async t=>{
@@ -497,8 +635,9 @@ test('rescheduling keeps partial steps and completed todo dates cannot be rewrit
 
 test('planned pause ranges can be added/removed and keep the streak across the break',async t=>{
  const page=await open(t);await page.clock.install({time:new Date('2026-11-02T12:00:00+01:00')});
- const taskId=await page.evaluate(()=>{state=migrate(seed());const t=state.tasks[0];t.created='2026-11-01';t.days=['2026-11-01'];selectedDate=day();save();tab='tasks';render();return t.id});
+ const taskId=await page.evaluate(()=>{state=migrate(seed());const t=state.tasks[0];t.created='2026-11-01';t.days=['2026-11-01'];selectedDate=day();save();tab='planner';render();return t.id});
  for(const mode of ['add','remove','add']){
+  await page.locator(`[data-workflow-action=habitActions][data-id="${taskId}"]`).click();
   await page.locator(`[data-workflow-action=pausePlan][data-id="${taskId}"]`).click();
   await page.locator('#pauseFrom').fill('2026-11-02');await page.locator('#pauseTo').fill('2026-11-04');
   await page.locator(`#pausePlanForm button[value=${mode}]`).click();
@@ -612,7 +751,7 @@ test('header actions align with the streak and overdue tasks keep their steps wh
  const page=await open(t);
  assert.equal(await page.locator('.brand-note,.development-message').count(),0);
  await page.locator('[data-tab=planner]').click();
- assert.match(await page.locator('.development-streak').innerText(),/⚡/);
+ assert.match(await page.locator('.level-development .development-streak').innerText(),/⚡/);
  assert.ok((await page.locator('.challenge-group-daily .mini-quest-list').boundingBox()).height<240);
  await page.locator('[data-tab=today]').click();
  const bounds=await page.locator('.home-add,.home-filter-toggle,#homeActions .development-streak').evaluateAll(items=>items.map(el=>({height:el.getBoundingClientRect().height,top:el.getBoundingClientRect().top})));
@@ -626,7 +765,7 @@ test('header actions align with the streak and overdue tasks keep their steps wh
  const overdue=page.locator('.overdue-card');
  assert.equal(await overdue.evaluate(el=>el.open),false);
  assert.equal(await page.locator(`[data-action=carry][data-id="${taskId}"]`).isVisible(),false);
- await overdue.locator('summary').click();await page.reload();
+ await overdue.locator('summary').click();await page.waitForFunction(()=>state.ui.overdueOpen===true);await page.reload();
  assert.equal(await overdue.evaluate(el=>el.open),true);
  await page.locator(`[data-action=carry][data-id="${taskId}"]`).click();
  assert.equal(await page.locator('.overdue-card').count(),0);
@@ -645,7 +784,14 @@ test('Szint tab keeps separate always-visible level and challenge cards while ho
  assert.equal(await page.locator('.level-page > .card').count(),2);
  assert.equal(await page.locator('.level-page > .card').nth(0).evaluate(el=>el.classList.contains('level-development')),true);
  assert.equal(await page.locator('.level-page > .card').nth(1).evaluate(el=>el.classList.contains('daily-mini-quests')),true);
- assert.equal(await page.locator('.date-strip,.week-planner,#quickTaskForm,[data-action=editTask]').count(),0);
+ assert.equal(await page.locator('.date-strip,.week-planner,#quickTaskForm').count(),0);
+ assert.equal(await page.locator('.level-page').evaluate(el=>[...el.children].map(x=>x.className).join('|')),'card daily-progress daily-development level-development|card daily-mini-quests|level-task-manager');
+ assert.equal(await page.locator('#levelTasksTitle').innerText(),'Feladataim');
+ const cards=await page.locator('.level-page>.card').allTextContents();
+ await page.locator('[data-filter-toggle]').click();await page.locator('[data-workflow-action=habitFilter][data-value=archived]').click();
+ assert.deepEqual(await page.locator('.level-page>.card').allTextContents(),cards);
+ await page.locator('[data-filter-toggle]').click();await page.locator('.home-filter-options [data-workflow-action=habitFilter][data-value=all]').click();
+ assert.equal(await page.locator('.level-task-manager .managed-habit').count(),3);
  assert.equal(await page.locator('.daily-mini-quests details,.daily-mini-quests summary').count(),0);
  assert.equal(await page.locator('#challengesTitle').innerText(),'Kihívások');
  assert.equal(await page.locator('.challenge-group-daily').isVisible(),true);
