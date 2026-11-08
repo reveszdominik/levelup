@@ -53,3 +53,53 @@ body[data-view=rewards] .eyebrow{margin-bottom:12px}body[data-view=rewards] .hea
 .reward-list{margin-top:12px}.reward-list .reward-group{margin-top:0}.reward-list .reward-group+.reward-group{margin-top:8px}.reward-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:4px;font-size:9px;color:#87937f}.reward-meta .reward-cost{margin-top:0;font-size:9px}.reward-category{overflow-wrap:anywhere}.reward-history{margin-top:18px;border-color:#e4dfeb;background:#fffdfb}.reward-history>summary>strong{font-size:15px}.reward-history-content{border-top:1px solid #ede9ef;padding:0 0 12px;font-size:12px}.reward-history-content .item{font-size:12px;gap:10px}.reward-history-content .grow{min-width:0;overflow-wrap:anywhere}.reward-history-content small{display:block;margin-top:3px;font-size:10px}.reward-history-content .item>strong{flex:none}.reward-countdowns{margin-top:14px;padding-top:12px;border-top:1px solid #d8cfdf}.reward-countdown+.reward-countdown{margin-top:12px}.reward-countdown-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:#69537e}.reward-countdown-heading>span{min-width:0;overflow-wrap:anywhere}.reward-countdown-heading>strong{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px}.reward-countdown .progress{margin:7px 0 0;height:6px;background:#dcd8df}.reward-countdown .bar{background:linear-gradient(90deg,#a28bbd,#84a879);transition:none}
 /* Reward rows mirror habit rows; edit from the large reward icon. */
 .reward-row{gap:7px}.reward-row .reward-edit{display:grid;place-items:center;flex:none;width:44px;min-width:44px;height:44px;min-height:44px;border:0;border-radius:12px;padding:0;background:#eeebf4;font-size:23px;cursor:pointer}.reward-row .task-meta{font-size:9px;color:#7b877d;gap:4px;margin-top:4px}.category-dot{display:inline-block;flex:none;width:5px;height:5px;border-radius:50%;background:#bba578}.reward-xp{min-width:26px;margin:0 2px;font-size:11px}.reward-xp small{font-size:8px}.reward-actions{gap:6px}#rewardCategoryForm input{min-width:0;flex:1;border:1px solid #dde3ec;border-radius:12px;padding:12px}@media(max-width:360px){.reward-row{gap:6px}.reward-row .task-meta{font-size:8px}.reward-actions{gap:4px}.reward-xp{min-width:24px;margin:0;font-size:10px}}
+/* Compact progress overview with persistent native disclosures. */
+body[data-view=stats] .head{margin-bottom:16px}
+.progress-overview{padding:18px;background:linear-gradient(125deg,#eeebf4,#f1f3eb)}
+.progress-overview h2{margin:0 0 6px;font-size:16px;color:#69537e}
+.progress-overview .section-kicker{font-size:9px;letter-spacing:.5px}
+.progress-overview .review-numbers{margin:16px 0 10px;gap:12px}
+.progress-overview .review-numbers strong{font-size:27px}
+.progress-overview .review-comparison{font-size:11px;line-height:1.5;margin:12px 0 0}
+.progress-overview .xp-chart{display:grid;grid-template-columns:repeat(var(--chart-days),minmax(0,1fr));gap:8px;margin:14px 0 0;align-items:end;height:auto}
+.progress-overview .xp-column{min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px}
+.progress-overview .xp-column strong{font-size:10px;font-weight:600;color:#7c688e}
+.progress-overview .xp-column small{font-size:10px;color:#7b8972}
+.progress-overview .xp-track{height:62px;width:20px;max-width:100%;border-radius:6px;background:#e3dfeb;display:flex;align-items:flex-end;overflow:hidden}
+.progress-overview .xp-bar{width:100%;border-radius:6px;background:#a08ab8}
+.stats-fold{margin:10px 0;background:#fffdfb}
+.stats-fold>summary{min-height:60px}
+.stats-fold-meta{display:flex;align-items:center;gap:10px;font-size:10px;color:#8c7a99;text-align:right}
+.stats-chevron{display:inline-block;flex:none;font-size:17px;color:#95829f}
+.stats-fold[open]>summary>.stats-fold-meta>.stats-chevron,.stats-habit[open]>summary>.stats-chevron{transform:rotate(180deg)}
+.stats-fold-content{border-top:1px solid #ebe6ef;padding:10px 0 14px;font-size:12px}
+.stats-fold-content>.muted{font-size:11px;line-height:1.6}
+.stats-habit{border-bottom:1px solid #ebe6ef}
+.stats-habit:last-child{border-bottom:0}
+.stats-habit>summary{list-style:none;display:flex;align-items:center;gap:10px;min-height:64px;padding:10px 0;cursor:pointer}
+.stats-habit>summary::-webkit-details-marker{display:none}
+.stats-habit>summary>.emoji{font-size:23px;flex:none}
+.stats-habit>summary>.grow{min-width:0;overflow-wrap:anywhere}
+.stats-habit>summary strong{font-size:12px;font-weight:600;color:#596653;line-height:1.5}
+.stats-habit>summary small{display:block;margin-top:3px;font-size:9px;color:#87917f}
+.stats-habit-progress{font-size:12px;color:#806b92;white-space:nowrap;flex:none}
+.stats-habit-content{padding:0 0 14px}
+.stats-habit-content .habit-stats-grid{margin:6px 0 12px}
+.stats-habit-content .habit-stats-grid strong{font-size:16px;color:#7b658f}
+.stats-habit-content .habit-stats-grid small{font-size:9px}
+.stats-habit-content>.muted{font-size:10px;line-height:1.6}
+.stats-milestones{padding:8px 0 12px;color:#7c688e;font-size:11px}
+.stats-milestones p{margin:0 0 8px;line-height:1.6}
+.stats-calendar-button{min-height:44px}
+.stats-badge{gap:10px}
+.stats-badge .grow,.stats-history-list .grow{min-width:0;overflow-wrap:anywhere}
+.stats-badge .name,.stats-history-list .name{font-size:12px}
+.stats-badge .muted,.stats-history-list .muted{font-size:10px;line-height:1.6}
+.stats-badge-state{font-size:9px;flex:none;color:#7a9369}
+.stats-badge.is-locked .stats-badge-state{color:#9990a1}
+.stats-history-switch{display:flex;gap:4px;background:#f1edf5;padding:4px;border-radius:12px;margin:2px 0 6px}
+.stats-history-switch button{flex:1;min-height:44px;border:0;background:transparent;border-radius:9px;font-size:11px;color:#887494}
+.stats-history-switch button[aria-pressed=true]{background:#fffdfb;color:#69537e;box-shadow:0 1px 4px #6e587d12}
+.stats-history-list .item{font-size:12px;gap:10px}
+.stats-history-list .item>strong,.stats-history-list .item>small{flex:none;white-space:nowrap;font-size:10px;color:#8c7a99}
+.stats-fold summary:focus-visible,.stats-history-switch button:focus-visible{outline:2px solid #a08ab8;outline-offset:3px;border-radius:9px}

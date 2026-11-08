@@ -155,8 +155,8 @@ test('chart labels align with dates; all seven mobile views load', async t => {
     const root = document.createElement('div'); root.innerHTML = weeklyXPChart();
     return [...root.querySelectorAll('.xp-column small')].map(x => x.textContent);
   });
-  const expected = await page.evaluate(() => Array.from({ length: 7 }, (_, i) =>
-    new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(fromKey(shift(day(), i - 6)))));
+  const expected = await page.evaluate(() => statsWeekDates().map(d =>
+    new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(fromKey(d))));
   const hu = { Mon: 'H', Tue: 'K', Wed: 'Sze', Thu: 'Cs', Fri: 'P', Sat: 'Szo', Sun: 'V' };
   assert.deepEqual(labels, expected.map(x => hu[x]));
   for (const tab of ['today', 'planner', 'tasks', 'rewards', 'stats', 'focus', 'settings']) {
@@ -270,7 +270,8 @@ test('archiving removes a habit from active views without losing history and res
   await page.locator('#modalRoot [data-tab=focus]').click();
   assert.equal(await page.locator(`#focusTask option[value="${taskId}"]`).count(), 0);
   await page.locator('#nav [data-tab=stats]').click();
-  assert.match(await page.locator('.habit-stats').first().innerText(), /Archivált/);
+  await page.locator('[data-stats-fold=habits]>summary').click();
+  assert.match(await page.locator(`[data-stats-fold="habit:${taskId}"]>summary`).innerText(), /Archivált/);
   await page.locator('[data-action=more]').click();
   await page.locator('#modalRoot [data-tab=tasks]').click();
   await page.locator('.archived-habits summary').click();
@@ -352,10 +353,79 @@ test('weekly review compares matching weekdays and respects pauses and weekly ta
     tab='stats';render();
   });
   assert.match(await page.locator('.review-comparison').innerText(),/\+2 teljesítés/);
-  assert.match(await page.locator('.review-insight').innerText(),/30 perc olvasás/);
-  await page.locator('.weekly-review summary').click();
-  assert.match(await page.locator('.review-habit').nth(0).innerText(),/2\/2/);
-  assert.match(await page.locator('.review-habit').nth(1).innerText(),/1\/2/);
+  await page.locator('[data-stats-fold=habits]>summary').click();
+  assert.equal(await page.locator('.stats-habit-progress').nth(0).innerText(),'2/2');
+  assert.equal(await page.locator('.stats-habit-progress').nth(1).innerText(),'1/2');
+  assert.deepEqual(await page.locator('.xp-column strong').allTextContents(),['50','20','0']);
+  assert.equal(await page.locator('.review-numbers strong').nth(1).innerText(),'70');
+  assert.equal(await page.locator('.review-insight').count(),0);
+});
+
+test('progress disclosures, habit details and history selection persist without changing user records',async t=>{
+ const page=await open(t);
+ const original=await page.evaluate(async()=>{
+  await toggle(state.tasks[0]);await toggle(state.tasks[1]);
+  state.tasks[0].name='<b>Olvasás</b>';save();tab='stats';render();
+  return JSON.stringify({tasks:state.tasks,history:state.history,ledger:state.ledger,rewards:state.rewards,settings:state.settings});
+ });
+ assert.equal(await page.locator('#view>.card').count(),5);
+ assert.equal(await page.locator('.stats-fold[open]').count(),0);
+ assert.equal(await page.locator('#view').getByText('Szint',{exact:true}).count(),0);
+ assert.equal(await page.locator('#view').getByText('Achievementek',{exact:true}).count(),0);
+ for(const key of ['habits','activity','badges','history'])await page.locator(`[data-stats-fold=${key}]>summary`).click();
+ await page.waitForFunction(()=>state.ui.statsOpen.length===4);
+ const habit=page.locator('.stats-habit').first();
+ await habit.locator('summary').focus();await page.keyboard.press('Enter');
+ await page.waitForFunction(()=>state.ui.statsOpen.some(k=>k.startsWith('habit:')));
+ assert.match(await habit.innerText(),/Következő mérföldkő: 10 teljesítés · 1\/10/);
+ assert.equal(await habit.locator('summary b').count(),0);
+ await habit.locator('[data-action=habitCalendar]').click();
+ assert.equal(await page.locator('.calendar-grid').isVisible(),true);
+ await page.locator('#modalRoot [data-action=close]').click();
+ await page.locator('[data-workflow-action=statsHistory][data-value=todos]').click();
+ assert.match(await page.locator('.stats-history-list').innerText(),/Porszívózás/);
+ await page.reload();await page.locator('#nav [data-tab=stats]').click();
+ assert.equal(await page.locator('.stats-fold[open]').count(),4);
+ assert.equal(await page.locator('.stats-habit[open]').count(),1);
+ assert.equal(await page.locator('[data-workflow-action=statsHistory][data-value=todos]').getAttribute('aria-pressed'),'true');
+ for(const width of [320,375,390,430,900]){
+  await page.setViewportSize({width,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ }
+ assert.equal(await page.evaluate(()=>JSON.stringify({tasks:state.tasks,history:state.history,ledger:state.ledger,rewards:state.rewards,settings:state.settings})),original);
+ await page.locator('[data-stats-fold=activity]>summary').click();
+ await page.waitForFunction(()=>!state.ui.statsOpen.includes('activity'));
+ await page.reload();await page.locator('#nav [data-tab=stats]').click();
+ assert.equal(await page.locator('[data-stats-fold=activity]').getAttribute('open'),null);
+});
+
+test('progress handles empty and legacy data, week boundaries and failed preference saves',async t=>{
+ const page=await open(t,JSON.stringify({tasks:[],rewards:[],ledger:[],history:[]}));
+ await page.locator('#nav [data-tab=stats]').click();
+ await page.locator('[data-stats-fold=habits]>summary').click();
+ assert.match(await page.locator('[data-stats-fold=habits]').innerText(),/Még nincs szokásod/);
+ await page.locator('[data-stats-fold=history]>summary').click();
+ assert.match(await page.locator('.stats-history-list').innerText(),/Még nincs esemény/);
+ await page.locator('[data-workflow-action=statsHistory][data-value=todos]').click();
+ assert.match(await page.locator('.stats-history-list').innerText(),/Még nincs teljesített teendő/);
+ await page.clock.install({time:new Date('2027-01-04T12:00:00+01:00')});
+ await page.evaluate(()=>{
+  state.history=[{id:id(),type:'task',date:'2027-01-03',points:99},{id:id(),type:'task',date:day(),points:20,xpReset:true},{id:id(),type:'focus',date:day(),points:15}];
+  save();render();
+ });
+ assert.equal(await page.locator('.xp-column').count(),1);
+ assert.equal(await page.locator('.xp-column small').innerText(),'H');
+ assert.equal(await page.locator('.xp-column strong').innerText(),'15');
+ assert.equal(await page.locator('.review-numbers strong').nth(0).innerText(),'1');
+ assert.equal(await page.locator('.review-numbers strong').nth(1).innerText(),'15');
+ const saved=await page.evaluate(()=>{
+  window.realSetItem=Storage.prototype.setItem;Storage.prototype.setItem=()=>{throw Error('QuotaExceededError')};return localStorage.getItem(KEY);
+ });
+ await page.locator('[data-stats-fold=badges]>summary').click();
+ await page.getByText('Mentés sikertelen – a korábbi adatok változatlanok.',{exact:true}).waitFor();
+ assert.equal(await page.locator('[data-stats-fold=badges]').getAttribute('open'),null);
+ assert.equal(await page.evaluate(()=>localStorage.getItem(KEY)),saved);
+ await page.evaluate(()=>{Storage.prototype.setItem=window.realSetItem});
 });
 
 async function showFocus(page){
@@ -626,7 +696,7 @@ test('header actions align with the streak and overdue tasks keep their steps wh
  const overdue=page.locator('.overdue-card');
  assert.equal(await overdue.evaluate(el=>el.open),false);
  assert.equal(await page.locator(`[data-action=carry][data-id="${taskId}"]`).isVisible(),false);
- await overdue.locator('summary').click();await page.reload();
+ await overdue.locator('summary').click();await page.waitForFunction(()=>state.ui.overdueOpen===true);await page.reload();
  assert.equal(await overdue.evaluate(el=>el.open),true);
  await page.locator(`[data-action=carry][data-id="${taskId}"]`).click();
  assert.equal(await page.locator('.overdue-card').count(),0);

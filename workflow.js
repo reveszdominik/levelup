@@ -28,6 +28,13 @@ function initializeDateStrip(){
 }
 window.addEventListener('resize',()=>{const rail=document.querySelector('.date-strip');if(rail)rail.scrollLeft=rail.clientWidth});
 document.addEventListener('toggle',event=>{
+ const section=event.target,keyId=section.dataset.statsFold;
+ if(keyId){
+  if(!section.isConnected||tab!=='stats')return;
+  const wasOpen=state.ui.statsOpen.includes(keyId),open=section.open;if(wasOpen===open)return;
+  const next=JSON.parse(JSON.stringify(state));next.ui.statsOpen=open?[...next.ui.statsOpen,keyId]:next.ui.statsOpen.filter(k=>k!==keyId);
+  if(!replaceState(next))section.open=wasOpen;return;
+ }
  const key=event.target.matches('.overdue-card')?'overdueOpen':event.target.matches('.reward-history')?'rewardHistoryOpen':null;
  if(!key)return;
  const open=event.target.open;if((state.ui[key]===true)===open)return;
@@ -159,6 +166,10 @@ document.addEventListener('click',event=>{
  if(action==='filter'){
   const value=button.dataset.value;if(!['all','pending','done'].includes(value))return;
   const next=JSON.parse(JSON.stringify(state));next.ui.missionFilter=value;if(replaceState(next)){render();document.querySelector('[data-filter-toggle]')?.focus({preventScroll:true})}
+ }else if(action==='statsHistory'){
+  const value=button.dataset.value;if(!['events','todos'].includes(value))return;
+  const next=JSON.parse(JSON.stringify(state));next.ui.statsHistoryView=value;
+  if(replaceState(next)){render();document.querySelector(`[data-workflow-action="statsHistory"][data-value="${value}"]`)?.focus({preventScroll:true})}
  }else if(action==='deleteRewardCategory'){
   deleteRewardCategory(button.dataset.category);
  }else if(action==='rewardFilter'){

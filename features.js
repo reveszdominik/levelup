@@ -21,21 +21,32 @@ function subtasksModal(t){
  const key=t.id+':'+selectedDate,checks=state.subtaskChecks[key]||[],disabled=t.archived||selectedDate>day();
  modal(`<h2>${esc(t.name)}</h2><p class="muted">A részfeladatok nem adnak külön XP-t. A főfeladatot a listában pipálhatod ki.</p><p class="muted" id="subtaskProgress">${t.subtasks.filter((_,i)=>checks.includes(i)).length}/${t.subtasks.length} lépés kész</p><div class="subtask-list">${t.subtasks.map((text,i)=>`<label class="subtask-check"><input type="checkbox" data-sub="${i}" data-task="${esc(t.id)}" data-date="${selectedDate}" ${checks.includes(i)?'checked':''} ${disabled?'disabled':''}><span>${esc(text)}</span></label>`).join('')}</div><button class="btn alt" data-action="close">Bezárás</button>`);
 }
+function statsWeekDates(){
+ const dates=[];for(let d=weekStart(day());d<=day();d=shift(d,1))dates.push(d);return dates;
+}
+function weeklyHabitProgress(t,dates=statsWeekDates()){
+ const available=dates.filter(d=>d>=t.created&&!isPaused(t,d)&&(t.frequency!=='weekdays'||t.weekdays.includes(weekday(d)))).length;
+ const target=t.frequency==='weekly'?Math.min(t.weeklyTarget,available):available;
+ const completed=new Set(t.days.filter(d=>d>=dates[0]&&d<=dates[dates.length-1])).size;
+ return {target,completed};
+}
 function weeklySummary(){
- const start=weekStart(day()),end=day(),previousStart=shift(start,-7),previousEnd=shift(end,-7);
+ const dates=statsWeekDates(),start=dates[0],end=day(),previousStart=shift(start,-7),previousEnd=shift(end,-7);
  const entries=state.history.filter(h=>h.type==='task'),count=(a,b)=>entries.filter(h=>h.date>=a&&h.date<=b).length;
  const total=count(start,end),previous=count(previousStart,previousEnd),delta=total-previous;
- const dates=[];for(let d=start;d<=end;d=shift(d,1))dates.push(d);
- const habits=state.tasks.filter(t=>t.kind==='habit'&&!t.archived).map(t=>{
-  const available=dates.filter(d=>d>=t.created&&!isPaused(t,d)&&(t.frequency!=='weekdays'||t.weekdays.includes(weekday(d)))).length;
-  const target=t.frequency==='weekly'?Math.min(t.weeklyTarget,available):available;
-  const completed=new Set(t.days.filter(d=>d>=start&&d<=end)).size;
-  return {task:t,target,completed};
- });
- const strongest=habits.filter(h=>h.target>0&&h.completed>=h.target).sort((a,b)=>b.completed-a.completed)[0];
- const needsAttention=habits.filter(h=>h.target>h.completed).sort((a,b)=>(a.completed/a.target)-(b.completed/b.target))[0];
- const insight=strongest?`Jól ment: ${strongest.task.name} – az eddigi heti célod teljesült.`:total?'Már tettél lépéseket ezen a héten. Építs a kis győzelmekre!':'Még nincs teljesítés ezen a héten. Egy kis lépés is jó kezdet.';
- return `<section class="card weekly-review" aria-label="Heti visszatekintés"><span class="section-kicker">HÉTFŐTŐL MÁIG · ${start} – ${end}</span><div class="review-numbers"><div><strong>${total}</strong><span>teljesítés</span></div><div><strong>${dates.reduce((n,d)=>n+pointsOn(d),0)}</strong><span>megszerzett XP</span></div></div><p class="review-comparison">${previous?`${delta>0?'+':''}${delta} teljesítés az előző hét azonos napjaihoz képest.`:total?'Az előző hét azonos napjain még nem volt teljesítés.':'Az előző hét azonos napjain sem volt teljesítés.'}</p><p class="review-insight">${esc(insight)}</p>${needsAttention?`<p class="muted">Következő kis lépés: ${esc(needsAttention.task.name)} (${needsAttention.completed}/${needsAttention.target} alkalom).</p>`:''}<details><summary>Szokásonkénti áttekintés · ${habits.length}</summary><p class="muted">A célok a hét eddig eltelt, nem szünetelő napjaira vonatkoznak; a heti szokásoknál legfeljebb a heti célra.</p>${habits.map(h=>`<div class="review-habit"><span>${esc(h.task.emoji)} ${esc(h.task.name)}</span><strong>${h.completed}/${h.target}</strong></div>`).join('')||'<p class="muted">Még nincs aktív szokásod.</p>'}</details></section>`;
+ return `<section class="card weekly-review progress-overview" aria-label="Ezen a héten"><h2>Ezen a héten</h2><span class="section-kicker">Hétfőtől máig · ${fromKey(start).toLocaleDateString('hu-HU',{month:'short',day:'numeric'})} – ${fromKey(end).toLocaleDateString('hu-HU',{month:'short',day:'numeric'})}</span><div class="review-numbers"><div><strong>${total}</strong><span>teljesítés</span></div><div><strong>${dates.reduce((n,d)=>n+pointsOn(d),0)}</strong><span>megszerzett XP</span></div></div>${weeklyXPChart()}<p class="review-comparison">${delta>0?'+':''}${delta} teljesítés az előző hét azonos időszakához képest.</p></section>`;
+}
+function statsFold(key,title,note,content){
+ return `<details class="card fold-card stats-fold" data-stats-fold="${esc(key)}" ${state.ui.statsOpen.includes(key)?'open':''}><summary><strong>${esc(title)}</strong><span class="stats-fold-meta">${esc(note)} <span class="stats-chevron" aria-hidden="true">⌄</span></span></summary><div class="stats-fold-content">${content}</div></details>`;
+}
+function statsHistoryHTML(){
+ const view=state.ui.statsHistoryView,records=state.history.slice(-15).reverse(),todos=state.tasks.filter(t=>t.kind==='todo'&&t.days.length);
+ const labels={task:'Feladat',quest:'Küldetés',focus:'Fókusz',challenge:'Kihívás',reward:'Jutalom'};
+ return `<div class="stats-history-switch" role="group" aria-label="Előzmények nézete">${[['events','Események'],['todos','Kész teendők']].map(([key,label])=>`<button type="button" data-workflow-action="statsHistory" data-value="${key}" aria-pressed="${view===key}">${label}</button>`).join('')}</div><div class="stats-history-list">${view==='todos'?todos.map(t=>`<div class="item"><span class="grow">${esc(t.emoji)} ${esc(t.name)}</span><small>${esc(t.days[0])}</small></div>`).join('')||'<p class="muted">Még nincs teljesített teendő.</p>':records.map(h=>`<div class="item"><div class="grow"><div class="name">${esc(h.name)}</div><div class="muted">${esc(h.date)} · ${labels[h.type]||'Esemény'}${h.xpReset?' · XP-nullázás előtti':''}</div></div><strong>${h.type==='reward'?'−':'+'}${Number(h.points)||0} XP</strong></div>`).join('')||'<p class="muted">Még nincs esemény.</p>'}</div>`;
+}
+function statsPageHTML(){
+ const badges=achievements(),habits=state.tasks.filter(t=>t.kind==='habit');
+ return `${weeklySummary()}${statsFold('habits','Szokásaim',habits.length+' szokás',habitStats())}${statsFold('activity','Aktivitási naptár','8 hét',heatmap())}${statsFold('badges','Jelvények',badges.filter(a=>a.ok).length+'/'+badges.length+' feloldva',badges.map(a=>`<div class="item stats-badge ${a.ok?'':'is-locked'}"><span class="emoji" aria-hidden="true">${a.icon}</span><div class="grow"><div class="name">${esc(a.name)}</div><div class="muted">${esc(a.desc)}</div></div><span class="stats-badge-state">${a.ok?'Feloldva':'Zárolva'}</span></div>`).join(''))}${statsFold('history','Előzmények','',statsHistoryHTML())}`;
 }
 async function resetXP(){
  if(!confirm('Nullázod az összes megszerzett XP-t és az elkölthető egyenleget? A szinted 1-re áll. A feladatok, teljesítések, sorozatok és előzmények megmaradnak.'))return;
