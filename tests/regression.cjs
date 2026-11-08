@@ -273,7 +273,7 @@ test('archiving removes a habit from active views without losing history and res
   await page.locator('[data-stats-fold=habits]>summary').click();
   assert.match(await page.locator(`[data-stats-fold="habit:${taskId}"]>summary`).innerText(), /Archivált/);
   await page.locator('#nav [data-tab=planner]').click();
-  await page.locator('.archived-habits summary').click();
+  await page.locator('.archived-habits>summary').click();
   await page.locator(`[data-action=restoreTask][data-id="${taskId}"]`).click();
   await page.locator('#nav [data-tab=today]').click();
   assert.equal(await page.locator(`[data-action=toggle][data-id="${taskId}"]`).isVisible(), true);
@@ -442,6 +442,18 @@ test('habit management shares header controls and filters while preserving histo
   state.focusSessions=[{id:'old-focus',date:shift(day(),-1),minutes:25}];save();render();return state.tasks[0].id;
  });
  const records=await page.evaluate(()=>JSON.stringify({history:state.history,ledger:state.ledger,focusSessions:state.focusSessions}));
+ const activeGroups=page.locator('.managed-list>.managed-category');
+ assert.deepEqual(await activeGroups.locator(':scope>summary>strong').allTextContents(),['Egészség','Tanulás','Egyéb']);
+ const category=activeGroups.nth(1);
+ await category.locator('summary').press('Enter');
+ await page.waitForFunction(()=>state.ui.collapsedHabitCategories.length===1);
+ assert.equal(await category.locator('.managed-habit').isVisible(),false);
+ await page.locator('#nav [data-tab=today]').click();await page.locator('#nav [data-tab=planner]').click();
+ assert.equal(await activeGroups.nth(1).getAttribute('open'),null);
+ await page.reload();await page.locator('#nav [data-tab=planner]').click();
+ assert.equal(await activeGroups.nth(1).getAttribute('open'),null);
+ await activeGroups.nth(1).locator('summary').click();
+ await page.waitForFunction(()=>state.ui.collapsedHabitCategories.length===0);
  const controls=await page.locator('#homeActions .home-add,#homeActions .home-filter-toggle,#homeActions .development-streak').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().height));
  assert.deepEqual(controls,[44,44,44]);
  assert.equal(await page.locator('#view [data-action=archiveTask]').count(),0);

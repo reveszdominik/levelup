@@ -125,3 +125,12 @@ body[data-view=stats] .head{margin-bottom:16px}
 
 .level-task-manager{min-width:0}
 .level-task-manager>h2{font-size:16px;color:#69537e;margin:8px 0 4px}
+
+.managed-category{margin:0;border-bottom:1px solid #e3e8de}
+.managed-category:last-child{border-bottom:0}
+.managed-category>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:10px 0;list-style:none;cursor:pointer;color:#64745f;font-size:12px}
+.managed-category>summary::-webkit-details-marker{display:none}
+.managed-category>summary>strong{min-width:0;overflow-wrap:anywhere;font-weight:600}
+.managed-category>summary>span{display:flex;align-items:center;gap:12px;flex:none;color:#87937f;font-size:10px}
+.managed-category[open]>summary .stats-chevron{transform:rotate(180deg)}
+.managed-category>summary:focus-visible{outline:2px solid #a08ab8;outline-offset:2px;border-radius:8px}
