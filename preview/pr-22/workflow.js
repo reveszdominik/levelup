@@ -35,7 +35,7 @@ document.addEventListener('toggle',event=>{
   const next=JSON.parse(JSON.stringify(state));next.ui.statsOpen=open?[...next.ui.statsOpen,keyId]:next.ui.statsOpen.filter(k=>k!==keyId);
   if(!replaceState(next))section.open=wasOpen;return;
  }
- const key=event.target.matches('.overdue-card')?'overdueOpen':event.target.matches('.reward-history')?'rewardHistoryOpen':null;
+ const key=event.target.matches('.overdue-card')?'overdueOpen':event.target.matches('.reward-history')?'rewardHistoryOpen':event.target.matches('.archived-habits')?'archivedHabitsOpen':null;
  if(!key)return;
  const open=event.target.open;if((state.ui[key]===true)===open)return;
  const next=JSON.parse(JSON.stringify(state));next.ui[key]=open;replaceState(next);
@@ -166,6 +166,12 @@ document.addEventListener('click',event=>{
  if(action==='filter'){
   const value=button.dataset.value;if(!['all','pending','done'].includes(value))return;
   const next=JSON.parse(JSON.stringify(state));next.ui.missionFilter=value;if(replaceState(next)){render();document.querySelector('[data-filter-toggle]')?.focus({preventScroll:true})}
+ }else if(action==='habitFilter'){
+  const value=button.dataset.value;if(!['all','active','paused','archived'].includes(value))return;
+  const next=JSON.parse(JSON.stringify(state));next.ui.habitFilter=value;
+  if(replaceState(next)){render();document.querySelector('[data-filter-toggle]')?.focus({preventScroll:true})}
+ }else if(action==='habitActions'&&task?.kind==='habit'&&!task.archived){
+  habitActionsModal(task);
  }else if(action==='statsHistory'){
   const value=button.dataset.value;if(!['events','todos'].includes(value))return;
   const next=JSON.parse(JSON.stringify(state));next.ui.statsHistoryView=value;
