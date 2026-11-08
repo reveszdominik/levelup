@@ -273,7 +273,6 @@ test('archiving removes a habit from active views without losing history and res
   await page.locator('[data-stats-fold=habits]>summary').click();
   assert.match(await page.locator(`[data-stats-fold="habit:${taskId}"]>summary`).innerText(), /Archivált/);
   await page.locator('#nav [data-tab=planner]').click();
-  await page.locator('.archived-habits>summary').click();
   await page.locator(`[data-action=restoreTask][data-id="${taskId}"]`).click();
   await page.locator('#nav [data-tab=today]').click();
   assert.equal(await page.locator(`[data-action=toggle][data-id="${taskId}"]`).isVisible(), true);
@@ -470,6 +469,13 @@ test('habit management shares header controls and filters while preserving histo
  }
  await page.locator(`[data-workflow-action=habitActions][data-id="${taskId}"]`).click();
  page.once('dialog',dialog=>dialog.accept());await page.locator('#modalRoot [data-action=archiveTask]').click();
+ const archivedRow=page.locator(`[data-managed-id="${taskId}"]`);
+ assert.equal(await archivedRow.isVisible(),true);
+ assert.match(await archivedRow.getAttribute('class'),/is-archived/);
+ assert.equal(await archivedRow.locator('.name').evaluate(el=>getComputedStyle(el).textDecorationLine.includes('line-through')),true);
+ assert.equal(await archivedRow.locator('.emoji-edit').evaluate(el=>getComputedStyle(el).filter),'grayscale(1)');
+ assert.equal(await page.locator('.archived-habits').count(),0);
+ await filter('active');assert.equal(await archivedRow.count(),0);
  await filter('archived');
  assert.equal(await page.locator('.managed-habit').count(),1);
  await page.reload();await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-action=close]').click();await page.locator('#nav [data-tab=planner]').click();
@@ -484,14 +490,14 @@ test('habit management shares header controls and filters while preserving histo
  await page.locator('.home-add').click();
  assert.equal(await page.locator('#taskForm [name=kind]').inputValue(),'habit');
  await page.locator('#taskForm [name=name]').fill('Új szokás');await page.locator('#taskForm button[type=submit]').click();
- await page.locator('.archived-habits>summary').click();
- await page.waitForFunction(()=>state.ui.archivedHabitsOpen);
+ await activeGroups.first().locator('summary').click();
+ await page.waitForFunction(()=>state.ui.collapsedHabitCategories.length===1);
  for(const width of [320,375,390,430,900]){
   await page.setViewportSize({width,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  }
  await page.reload();await page.locator('[data-action=more]').click();await page.locator('#modalRoot [data-action=close]').click();await page.locator('#nav [data-tab=planner]').click();
- assert.equal(await page.locator('.archived-habits').evaluate(el=>el.open),true);
+ assert.equal(await activeGroups.first().getAttribute('open'),null);
 });
 
 test('focus survives reload and pause, settles a closed block once, and resets safely',async t=>{

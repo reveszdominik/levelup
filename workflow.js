@@ -42,7 +42,7 @@ document.addEventListener('toggle',event=>{
   const next=JSON.parse(JSON.stringify(state));next.ui.statsOpen=open?[...next.ui.statsOpen,keyId]:next.ui.statsOpen.filter(k=>k!==keyId);
   if(!replaceState(next))section.open=wasOpen;return;
  }
- const key=event.target.matches('.overdue-card')?'overdueOpen':event.target.matches('.reward-history')?'rewardHistoryOpen':event.target.matches('.archived-habits')?'archivedHabitsOpen':null;
+ const key=event.target.matches('.overdue-card')?'overdueOpen':event.target.matches('.reward-history')?'rewardHistoryOpen':null;
  if(!key)return;
  const open=event.target.open;if((state.ui[key]===true)===open)return;
  const next=JSON.parse(JSON.stringify(state));next.ui[key]=open;replaceState(next);
