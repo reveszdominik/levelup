@@ -28,6 +28,13 @@ function initializeDateStrip(){
 }
 window.addEventListener('resize',()=>{const rail=document.querySelector('.date-strip');if(rail)rail.scrollLeft=rail.clientWidth});
 document.addEventListener('toggle',event=>{
+ const group=event.target,groupKey=group.dataset.habitGroup;
+ if(groupKey){
+  if(!group.isConnected||tab!=='planner')return;
+  const wasOpen=!state.ui.collapsedHabitCategories.includes(groupKey),open=group.open;if(wasOpen===open)return;
+  const next=JSON.parse(JSON.stringify(state));next.ui.collapsedHabitCategories=open?next.ui.collapsedHabitCategories.filter(k=>k!==groupKey):[...next.ui.collapsedHabitCategories,groupKey];
+  if(!replaceState(next))group.open=wasOpen;return;
+ }
  const section=event.target,keyId=section.dataset.statsFold;
  if(keyId){
   if(!section.isConnected||tab!=='stats')return;
