@@ -114,7 +114,7 @@ function miniMissionsHTML(){
 
 function levelPageHTML(){
  const today=day(),visible=state.tasks.filter(t=>!t.archived&&scheduled(t,today));
- return `<div class="level-page">${dailyDevelopmentHTML(visible,{date:today})}${miniMissionsHTML()}</div>`;
+ return `<div class="level-page">${dailyDevelopmentHTML(visible,{date:today})}${miniMissionsHTML()}<section class="level-task-manager" aria-labelledby="levelTasksTitle"><h2 id="levelTasksTitle">Feladataim</h2>${tasksPageHTML()}</section></div>`;
 }
 
 function gameMetrics(s){return {level:gameLevel(s),xp:gameXP(s),daily:gameXP(s,day()),goal:s.settings.dailyXPGoal,maxLevel:s.gameFeedback.maxLevel,goalShown:!!s.gameFeedback.goalDays[day()]}}
