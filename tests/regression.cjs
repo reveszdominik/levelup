@@ -772,7 +772,7 @@ test('Szint tab keeps separate always-visible level and challenge cards while ho
  const cards=await page.locator('.level-page>.card').allTextContents();
  await page.locator('[data-filter-toggle]').click();await page.locator('[data-workflow-action=habitFilter][data-value=archived]').click();
  assert.deepEqual(await page.locator('.level-page>.card').allTextContents(),cards);
- await page.locator('[data-filter-toggle]').click();await page.locator('[data-workflow-action=habitFilter][data-value=all]').click();
+ await page.locator('[data-filter-toggle]').click();await page.locator('.home-filter-options [data-workflow-action=habitFilter][data-value=all]').click();
  assert.equal(await page.locator('.level-task-manager .managed-habit').count(),3);
  assert.equal(await page.locator('.daily-mini-quests details,.daily-mini-quests summary').count(),0);
  assert.equal(await page.locator('#challengesTitle').innerText(),'Kihívások');
