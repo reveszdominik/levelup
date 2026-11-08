@@ -103,3 +103,24 @@ body[data-view=stats] .head{margin-bottom:16px}
 .stats-history-list .item{font-size:12px;gap:10px}
 .stats-history-list .item>strong,.stats-history-list .item>small{flex:none;white-space:nowrap;font-size:10px;color:#8c7a99}
 .stats-fold summary:focus-visible,.stats-history-switch button:focus-visible{outline:2px solid #a08ab8;outline-offset:3px;border-radius:9px}
+/* Habit management shares the compact rows and controls of home and rewards. */
+body[data-view=tasks] .head{margin-bottom:12px}
+body[data-view=tasks] .head h1{font-size:27px}
+.managed-list{padding:0;margin:0;background:transparent}
+.managed-habit{align-items:center;gap:8px;min-height:70px;padding:11px 0;border-bottom:1px solid #e3e8de}
+.managed-habit:last-child{border-bottom:0}
+.managed-habit .grow{min-width:0;overflow-wrap:anywhere}
+.managed-habit .name{font-size:13px;line-height:1.4}
+.managed-habit .emoji-edit{flex:none;border:0;border-radius:12px;font-size:23px}
+.managed-habit .task-meta{font-size:9px;gap:4px;margin-top:4px}
+.managed-habit .task-xp{flex:none;min-width:26px;font-size:11px}
+.managed-habit .habit-more,.managed-habit .habit-restore{display:grid;place-items:center;flex:none;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border:1px solid #ded5e9;border-radius:12px;background:#ece7f4;color:#70578e;font-size:24px}
+.managed-habit .habit-restore{font-size:25px}
+.habit-paused{color:#9a7d44}
+.habit-action-menu{display:grid;gap:10px;margin-top:16px}
+.habit-action-menu>.btn{min-height:48px;text-align:left}
+body[data-view=tasks] .archived-habits{margin-top:16px}
+body[data-view=tasks] .archived-habits>summary{display:flex;align-items:center;justify-content:space-between;min-height:56px;padding:8px 0}
+.archived-habit-content{border-top:1px solid #ebe6ef;padding-bottom:8px}
+.archived-habit-content>.muted,.managed-list>.muted{font-size:12px;line-height:1.6}
+@media(max-width:360px){.managed-habit{gap:6px}.managed-habit .name{font-size:12px}.managed-habit .task-meta{font-size:8px}}
